@@ -1,8 +1,6 @@
 package skipmap
 
 import (
-	"sync/atomic"
-	"unsafe"
 	_ "unsafe" // for linkname
 )
 
@@ -10,24 +8,6 @@ const (
 	maxLevel = 32
 	p        = 0.25
 )
-
-type atomicVal struct {
-	p unsafe.Pointer // *interface{}
-}
-
-func newAtomicVal() *atomicVal {
-	v := &atomicVal{}
-	v.Store(nil)
-	return v
-}
-
-func (v *atomicVal) Store(val interface{}) {
-	atomic.StorePointer(&v.p, unsafe.Pointer(&val))
-}
-
-func (v *atomicVal) Load() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&v.p))
-}
 
 //go:linkname fastrand runtime.fastrand
 func fastrand() uint32

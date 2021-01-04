@@ -117,7 +117,8 @@ func unlockInt64(preds [maxLevel]*int64Node, highestLevel int) {
 	}
 }
 
-func (s *Int64Map) Store(key int64, val interface{}) {
+// Store sets the value for a key.
+func (s *Int64Map) Store(key int64, value interface{}) {
 	level := randomLevel()
 	var preds, succs [maxLevel]*int64Node
 	for {
@@ -126,10 +127,10 @@ func (s *Int64Map) Store(key int64, val interface{}) {
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
-				nodeFound.storeVal(val)
+				nodeFound.storeVal(value)
 				return
 			}
-			// If the node is marked, represents some other thread is in the process of deleting this node,
+			// If the node is marked, represents some other goroutines is in the process of deleting this node,
 			// we need to add this node in next loop.
 			continue
 		}
@@ -159,7 +160,7 @@ func (s *Int64Map) Store(key int64, val interface{}) {
 			continue
 		}
 
-		nn := newInt64Node(key, val, level)
+		nn := newInt64Node(key, value, level)
 		for layer := 0; layer < level; layer++ {
 			nn.next[layer] = succs[layer]
 			preds[layer].storeNext(layer, nn)
@@ -170,7 +171,10 @@ func (s *Int64Map) Store(key int64, val interface{}) {
 	}
 }
 
-func (s *Int64Map) Load(key int64) (val interface{}, ok bool) {
+// Load returns the value stored in the map for a key, or nil if no
+// value is present.
+// The ok result indicates whether value was found in the map.
+func (s *Int64Map) Load(key int64) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
@@ -190,7 +194,9 @@ func (s *Int64Map) Load(key int64) (val interface{}, ok bool) {
 	return nil, false
 }
 
-func (s *Int64Map) LoadAndDelete(key int64) (val interface{}, loaded bool) {
+// LoadAndDelete deletes the value for a key, returning the previous value if any.
+// The loaded result reports whether the key was present.
+func (s *Int64Map) LoadAndDelete(key int64) (value interface{}, loaded bool) {
 	var (
 		nodeToDelete *int64Node
 		isMarked     bool // represents if this operation mark the node
@@ -209,7 +215,7 @@ func (s *Int64Map) LoadAndDelete(key int64) (val interface{}, loaded bool) {
 					// The node is marked by another process,
 					// the physical deletion will be accomplished by another process.
 					nodeToDelete.mu.Unlock()
-					return // false
+					return nil, false
 				}
 				nodeToDelete.flags.SetTrue(marked)
 				isMarked = true
@@ -248,19 +254,23 @@ func (s *Int64Map) LoadAndDelete(key int64) (val interface{}, loaded bool) {
 			atomic.AddInt64(&s.length, -1)
 			return nodeToDelete.loadVal(), true
 		}
-		return // false
-	}
-}
-
-func (s *Int64Map) LoadOrStore(key int64, val interface{}) (actual interface{}, loaded bool) {
-	val, ok := s.Load(key)
-	if !ok {
-		s.Store(key, val)
 		return nil, false
 	}
-	return val, true
 }
 
+// LoadOrStore returns the existing value for the key if present.
+// Otherwise, it stores and returns the given value.
+// The loaded result is true if the value was loaded, false if stored.
+func (s *Int64Map) LoadOrStore(key int64, value interface{}) (actual interface{}, loaded bool) {
+	loadedval, ok := s.Load(key)
+	if !ok {
+		s.Store(key, value)
+		return nil, false
+	}
+	return loadedval, true
+}
+
+// Delete deletes the value for a key.
 func (s *Int64Map) Delete(key int64) {
 	var (
 		nodeToDelete *int64Node
@@ -323,9 +333,14 @@ func (s *Int64Map) Delete(key int64) {
 	}
 }
 
-// Range calls f sequentially for each i and score present in the skip set.
+// Range calls f sequentially for each key and val present in the skipmap.
 // If f returns false, range stops the iteration.
-func (s *Int64Map) Range(f func(key int64, val interface{}) bool) {
+//
+// Range does not necessarily correspond to any consistent snapshot of the Map's
+// contents: no key will be visited more than once, but if the value for any key
+// is stored or deleted concurrently, Range may reflect any mapping for that key
+// from any point during the Range call.
+func (s *Int64Map) Range(f func(key int64, value interface{}) bool) {
 	x := s.header.loadNext(0)
 	for x != s.tail {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
@@ -341,7 +356,7 @@ func (s *Int64Map) Range(f func(key int64, val interface{}) bool) {
 
 // Len return the length of this skipmap.
 // Keep in sync with types_gen.go:lengthFunction
-// Special case for code generation, Must in the tail of skipset.go.
+// Special case for code generation, Must in the tail of skipmap.go.
 func (s *Int64Map) Len() int {
 	return int(atomic.LoadInt64(&s.length))
 }

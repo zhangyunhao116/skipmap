@@ -7,6 +7,7 @@ const (
 	marked
 )
 
+// concurrent-safe bitflag.
 type bitflag struct {
 	data uint32
 }

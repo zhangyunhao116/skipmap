@@ -262,12 +262,12 @@ func (s *Float32Map) LoadAndDelete(key float32) (value interface{}, loaded bool)
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (s *Float32Map) LoadOrStore(key float32, value interface{}) (actual interface{}, loaded bool) {
-	value, ok := s.Load(key)
+	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
 		return nil, false
 	}
-	return value, true
+	return loadedval, true
 }
 
 // Delete deletes the value for a key.
@@ -616,12 +616,12 @@ func (s *Float64Map) LoadAndDelete(key float64) (value interface{}, loaded bool)
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (s *Float64Map) LoadOrStore(key float64, value interface{}) (actual interface{}, loaded bool) {
-	value, ok := s.Load(key)
+	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
 		return nil, false
 	}
-	return value, true
+	return loadedval, true
 }
 
 // Delete deletes the value for a key.
@@ -970,12 +970,12 @@ func (s *Int32Map) LoadAndDelete(key int32) (value interface{}, loaded bool) {
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (s *Int32Map) LoadOrStore(key int32, value interface{}) (actual interface{}, loaded bool) {
-	value, ok := s.Load(key)
+	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
 		return nil, false
 	}
-	return value, true
+	return loadedval, true
 }
 
 // Delete deletes the value for a key.
@@ -1066,6 +1066,360 @@ func (s *Int32Map) Range(f func(key int32, value interface{}) bool) {
 // Keep in sync with types_gen.go:lengthFunction
 // Special case for code generation, Must in the tail of skipmap.go.
 func (s *Int32Map) Len() int {
+	return int(atomic.LoadInt64(&s.length))
+}
+
+// Int16Map represents a map based on skip list in ascending order.
+type Int16Map struct {
+	header *int16Node
+	tail   *int16Node
+	length int64
+}
+
+type int16Node struct {
+	score int16
+	val   unsafe.Pointer
+	next  []*int16Node
+	mu    sync.Mutex
+	flags bitflag
+}
+
+func newInt16Node(score int16, val interface{}, level int) *int16Node {
+	n := &int16Node{
+		score: score,
+		next:  make([]*int16Node, level),
+	}
+	n.storeVal(val)
+	return n
+}
+
+func (n *int16Node) storeVal(val interface{}) {
+	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+}
+
+func (n *int16Node) loadVal() interface{} {
+	return *(*interface{})(atomic.LoadPointer(&n.val))
+}
+
+// loadNext return `n.next[i]`(atomic)
+func (n *int16Node) loadNext(i int) *int16Node {
+	return (*int16Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
+}
+
+// storeNext same with `n.next[i] = val`(atomic)
+func (n *int16Node) storeNext(i int, val *int16Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+}
+
+// NewInt16 return an empty int16 skipmap.
+func NewInt16() *Int16Map {
+	h, t := newInt16Node(0, "", maxLevel), newInt16Node(0, "", maxLevel)
+	for i := 0; i < maxLevel; i++ {
+		h.next[i] = t
+	}
+	h.flags.SetTrue(fullyLinked)
+	t.flags.SetTrue(fullyLinked)
+	return &Int16Map{
+		header: h,
+		tail:   t,
+	}
+}
+
+// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// (without fullpath, if find the node will return immediately)
+func (s *Int16Map) findNode(score int16, preds *[maxLevel]*int16Node, succs *[maxLevel]*int16Node) *int16Node {
+	x := s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		succ := x.loadNext(i)
+		for succ != s.tail && succ.score < score {
+			x = succ
+			succ = x.loadNext(i)
+		}
+		preds[i] = x
+		succs[i] = succ
+
+		// Check if the score already in the skipmap.
+		if succ != s.tail && score == succ.score {
+			return succ
+		}
+	}
+	return nil
+}
+
+// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > score >= succs[i].
+func (s *Int16Map) findNodeDelete(score int16, preds *[maxLevel]*int16Node, succs *[maxLevel]*int16Node) int {
+	// lFound represents the index of the first layer at which it found a node.
+	lFound, x := -1, s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		succ := x.loadNext(i)
+		for succ != s.tail && succ.score < score {
+			x = succ
+			succ = x.loadNext(i)
+		}
+		preds[i] = x
+		succs[i] = succ
+
+		// Check if the score already in the skip list.
+		if lFound == -1 && succ != s.tail && score == succ.score {
+			lFound = i
+		}
+	}
+	return lFound
+}
+
+func unlockInt16(preds [maxLevel]*int16Node, highestLevel int) {
+	var prevPred *int16Node
+	for i := highestLevel; i >= 0; i-- {
+		if preds[i] != prevPred { // the node could be unlocked by previous loop
+			preds[i].mu.Unlock()
+			prevPred = preds[i]
+		}
+	}
+}
+
+// Store sets the value for a key.
+func (s *Int16Map) Store(key int16, value interface{}) {
+	level := randomLevel()
+	var preds, succs [maxLevel]*int16Node
+	for {
+		nodeFound := s.findNode(key, &preds, &succs)
+		if nodeFound != nil { // indicating the score is already in the skip-list
+			if !nodeFound.flags.Get(marked) {
+				// We don't need to care about whether or not the node is fully linked,
+				// just replace the value.
+				nodeFound.storeVal(value)
+				return
+			}
+			// If the node is marked, represents some other goroutines is in the process of deleting this node,
+			// we need to add this node in next loop.
+			continue
+		}
+
+		// Add this node into skip list.
+		var (
+			highestLocked        = -1 // the highest level being locked by this process
+			valid                = true
+			pred, succ, prevPred *int16Node
+		)
+		for layer := 0; valid && layer < level; layer++ {
+			pred = preds[layer]   // target node's previous node
+			succ = succs[layer]   // target node's next node
+			if pred != prevPred { // the node in this layer could be locked by previous loop
+				pred.mu.Lock()
+				highestLocked = layer
+				prevPred = pred
+			}
+			// valid check if there is another node has inserted into the skip list in this layer during this process.
+			// It is valid if:
+			// 1. The previous node and next node both are not marked.
+			// 2. The previous node's next node is succ in this layer.
+			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+		}
+		if !valid {
+			unlockInt16(preds, highestLocked)
+			continue
+		}
+
+		nn := newInt16Node(key, value, level)
+		for layer := 0; layer < level; layer++ {
+			nn.next[layer] = succs[layer]
+			preds[layer].storeNext(layer, nn)
+		}
+		nn.flags.SetTrue(fullyLinked)
+		unlockInt16(preds, highestLocked)
+		atomic.AddInt64(&s.length, 1)
+	}
+}
+
+// Load returns the value stored in the map for a key, or nil if no
+// value is present.
+// The ok result indicates whether value was found in the map.
+func (s *Int16Map) Load(key int16) (value interface{}, ok bool) {
+	x := s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		nex := x.loadNext(i)
+		for nex != s.tail && nex.score < key {
+			x = nex
+			nex = x.loadNext(i)
+		}
+
+		// Check if the score already in the skip list.
+		if nex != s.tail && key == nex.score {
+			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
+				return nex.loadVal(), true
+			}
+			return nil, false
+		}
+	}
+	return nil, false
+}
+
+// LoadAndDelete deletes the value for a key, returning the previous value if any.
+// The loaded result reports whether the key was present.
+func (s *Int16Map) LoadAndDelete(key int16) (value interface{}, loaded bool) {
+	var (
+		nodeToDelete *int16Node
+		isMarked     bool // represents if this operation mark the node
+		topLayer     = -1
+		preds, succs [maxLevel]*int16Node
+	)
+	for {
+		lFound := s.findNodeDelete(key, &preds, &succs)
+		if isMarked || // this process mark this node or we can find this node in the skip list
+			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
+			if !isMarked { // we don't mark this node for now
+				nodeToDelete = succs[lFound]
+				topLayer = lFound
+				nodeToDelete.mu.Lock()
+				if nodeToDelete.flags.Get(marked) {
+					// The node is marked by another process,
+					// the physical deletion will be accomplished by another process.
+					nodeToDelete.mu.Unlock()
+					return nil, false
+				}
+				nodeToDelete.flags.SetTrue(marked)
+				isMarked = true
+			}
+			// Accomplish the physical deletion.
+			var (
+				highestLocked        = -1 // the highest level being locked by this process
+				valid                = true
+				pred, succ, prevPred *int16Node
+			)
+			for layer := 0; valid && (layer <= topLayer); layer++ {
+				pred, succ = preds[layer], succs[layer]
+				if pred != prevPred { // the node in this layer could be locked by previous loop
+					pred.mu.Lock()
+					highestLocked = layer
+					prevPred = pred
+				}
+				// valid check if there is another node has inserted into the skip list in this layer
+				// during this process, or the previous is deleted by another process.
+				// It is valid if:
+				// 1. the previous node exists.
+				// 2. no another node has inserted into the skip list in this layer.
+				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+			}
+			if !valid {
+				unlockInt16(preds, highestLocked)
+				continue
+			}
+			for i := topLayer; i >= 0; i-- {
+				// Now we own the `nodeToDelete`, no other goroutine will modify it.
+				// So we don't need `nodeToDelete.loadNext`
+				preds[i].storeNext(i, nodeToDelete.next[i])
+			}
+			nodeToDelete.mu.Unlock()
+			unlockInt16(preds, highestLocked)
+			atomic.AddInt64(&s.length, -1)
+			return nodeToDelete.loadVal(), true
+		}
+		return nil, false
+	}
+}
+
+// LoadOrStore returns the existing value for the key if present.
+// Otherwise, it stores and returns the given value.
+// The loaded result is true if the value was loaded, false if stored.
+func (s *Int16Map) LoadOrStore(key int16, value interface{}) (actual interface{}, loaded bool) {
+	loadedval, ok := s.Load(key)
+	if !ok {
+		s.Store(key, value)
+		return nil, false
+	}
+	return loadedval, true
+}
+
+// Delete deletes the value for a key.
+func (s *Int16Map) Delete(key int16) {
+	var (
+		nodeToDelete *int16Node
+		isMarked     bool // represents if this operation mark the node
+		topLayer     = -1
+		preds, succs [maxLevel]*int16Node
+	)
+	for {
+		lFound := s.findNodeDelete(key, &preds, &succs)
+		if isMarked || // this process mark this node or we can find this node in the skip list
+			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
+			if !isMarked { // we don't mark this node for now
+				nodeToDelete = succs[lFound]
+				topLayer = lFound
+				nodeToDelete.mu.Lock()
+				if nodeToDelete.flags.Get(marked) {
+					// The node is marked by another process,
+					// the physical deletion will be accomplished by another process.
+					nodeToDelete.mu.Unlock()
+					return // false
+				}
+				nodeToDelete.flags.SetTrue(marked)
+				isMarked = true
+			}
+			// Accomplish the physical deletion.
+			var (
+				highestLocked        = -1 // the highest level being locked by this process
+				valid                = true
+				pred, succ, prevPred *int16Node
+			)
+			for layer := 0; valid && (layer <= topLayer); layer++ {
+				pred, succ = preds[layer], succs[layer]
+				if pred != prevPred { // the node in this layer could be locked by previous loop
+					pred.mu.Lock()
+					highestLocked = layer
+					prevPred = pred
+				}
+				// valid check if there is another node has inserted into the skip list in this layer
+				// during this process, or the previous is deleted by another process.
+				// It is valid if:
+				// 1. the previous node exists.
+				// 2. no another node has inserted into the skip list in this layer.
+				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+			}
+			if !valid {
+				unlockInt16(preds, highestLocked)
+				continue
+			}
+			for i := topLayer; i >= 0; i-- {
+				// Now we own the `nodeToDelete`, no other goroutine will modify it.
+				// So we don't need `nodeToDelete.loadNext`
+				preds[i].storeNext(i, nodeToDelete.next[i])
+			}
+			nodeToDelete.mu.Unlock()
+			unlockInt16(preds, highestLocked)
+			atomic.AddInt64(&s.length, -1)
+			return // true
+		}
+		return // false
+	}
+}
+
+// Range calls f sequentially for each key and val present in the skipmap.
+// If f returns false, range stops the iteration.
+//
+// Range does not necessarily correspond to any consistent snapshot of the Map's
+// contents: no key will be visited more than once, but if the value for any key
+// is stored or deleted concurrently, Range may reflect any mapping for that key
+// from any point during the Range call.
+func (s *Int16Map) Range(f func(key int16, value interface{}) bool) {
+	x := s.header.loadNext(0)
+	for x != s.tail {
+		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
+			x = x.loadNext(0)
+			continue
+		}
+		if !f(x.score, x.loadVal()) {
+			break
+		}
+		x = x.loadNext(0)
+	}
+}
+
+// Len return the length of this skipmap.
+// Keep in sync with types_gen.go:lengthFunction
+// Special case for code generation, Must in the tail of skipmap.go.
+func (s *Int16Map) Len() int {
 	return int(atomic.LoadInt64(&s.length))
 }
 
@@ -1324,12 +1678,12 @@ func (s *IntMap) LoadAndDelete(key int) (value interface{}, loaded bool) {
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (s *IntMap) LoadOrStore(key int, value interface{}) (actual interface{}, loaded bool) {
-	value, ok := s.Load(key)
+	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
 		return nil, false
 	}
-	return value, true
+	return loadedval, true
 }
 
 // Delete deletes the value for a key.
@@ -1420,360 +1774,6 @@ func (s *IntMap) Range(f func(key int, value interface{}) bool) {
 // Keep in sync with types_gen.go:lengthFunction
 // Special case for code generation, Must in the tail of skipmap.go.
 func (s *IntMap) Len() int {
-	return int(atomic.LoadInt64(&s.length))
-}
-
-// Uint32Map represents a map based on skip list in ascending order.
-type Uint32Map struct {
-	header *uint32Node
-	tail   *uint32Node
-	length int64
-}
-
-type uint32Node struct {
-	score uint32
-	val   unsafe.Pointer
-	next  []*uint32Node
-	mu    sync.Mutex
-	flags bitflag
-}
-
-func newUint32Node(score uint32, val interface{}, level int) *uint32Node {
-	n := &uint32Node{
-		score: score,
-		next:  make([]*uint32Node, level),
-	}
-	n.storeVal(val)
-	return n
-}
-
-func (n *uint32Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
-}
-
-func (n *uint32Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
-}
-
-// loadNext return `n.next[i]`(atomic)
-func (n *uint32Node) loadNext(i int) *uint32Node {
-	return (*uint32Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
-}
-
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *uint32Node) storeNext(i int, val *uint32Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
-}
-
-// NewUint32 return an empty uint32 skipmap.
-func NewUint32() *Uint32Map {
-	h, t := newUint32Node(0, "", maxLevel), newUint32Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
-	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
-	return &Uint32Map{
-		header: h,
-		tail:   t,
-	}
-}
-
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
-// (without fullpath, if find the node will return immediately)
-func (s *Uint32Map) findNode(score uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) *uint32Node {
-	x := s.header
-	for i := maxLevel - 1; i >= 0; i-- {
-		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
-			x = succ
-			succ = x.loadNext(i)
-		}
-		preds[i] = x
-		succs[i] = succ
-
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
-			return succ
-		}
-	}
-	return nil
-}
-
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Uint32Map) findNodeDelete(score uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) int {
-	// lFound represents the index of the first layer at which it found a node.
-	lFound, x := -1, s.header
-	for i := maxLevel - 1; i >= 0; i-- {
-		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
-			x = succ
-			succ = x.loadNext(i)
-		}
-		preds[i] = x
-		succs[i] = succ
-
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
-			lFound = i
-		}
-	}
-	return lFound
-}
-
-func unlockUint32(preds [maxLevel]*uint32Node, highestLevel int) {
-	var prevPred *uint32Node
-	for i := highestLevel; i >= 0; i-- {
-		if preds[i] != prevPred { // the node could be unlocked by previous loop
-			preds[i].mu.Unlock()
-			prevPred = preds[i]
-		}
-	}
-}
-
-// Store sets the value for a key.
-func (s *Uint32Map) Store(key uint32, value interface{}) {
-	level := randomLevel()
-	var preds, succs [maxLevel]*uint32Node
-	for {
-		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
-			if !nodeFound.flags.Get(marked) {
-				// We don't need to care about whether or not the node is fully linked,
-				// just replace the value.
-				nodeFound.storeVal(value)
-				return
-			}
-			// If the node is marked, represents some other goroutines is in the process of deleting this node,
-			// we need to add this node in next loop.
-			continue
-		}
-
-		// Add this node into skip list.
-		var (
-			highestLocked        = -1 // the highest level being locked by this process
-			valid                = true
-			pred, succ, prevPred *uint32Node
-		)
-		for layer := 0; valid && layer < level; layer++ {
-			pred = preds[layer]   // target node's previous node
-			succ = succs[layer]   // target node's next node
-			if pred != prevPred { // the node in this layer could be locked by previous loop
-				pred.mu.Lock()
-				highestLocked = layer
-				prevPred = pred
-			}
-			// valid check if there is another node has inserted into the skip list in this layer during this process.
-			// It is valid if:
-			// 1. The previous node and next node both are not marked.
-			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
-		}
-		if !valid {
-			unlockUint32(preds, highestLocked)
-			continue
-		}
-
-		nn := newUint32Node(key, value, level)
-		for layer := 0; layer < level; layer++ {
-			nn.next[layer] = succs[layer]
-			preds[layer].storeNext(layer, nn)
-		}
-		nn.flags.SetTrue(fullyLinked)
-		unlockUint32(preds, highestLocked)
-		atomic.AddInt64(&s.length, 1)
-	}
-}
-
-// Load returns the value stored in the map for a key, or nil if no
-// value is present.
-// The ok result indicates whether value was found in the map.
-func (s *Uint32Map) Load(key uint32) (value interface{}, ok bool) {
-	x := s.header
-	for i := maxLevel - 1; i >= 0; i-- {
-		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
-			x = nex
-			nex = x.loadNext(i)
-		}
-
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
-			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
-				return nex.loadVal(), true
-			}
-			return nil, false
-		}
-	}
-	return nil, false
-}
-
-// LoadAndDelete deletes the value for a key, returning the previous value if any.
-// The loaded result reports whether the key was present.
-func (s *Uint32Map) LoadAndDelete(key uint32) (value interface{}, loaded bool) {
-	var (
-		nodeToDelete *uint32Node
-		isMarked     bool // represents if this operation mark the node
-		topLayer     = -1
-		preds, succs [maxLevel]*uint32Node
-	)
-	for {
-		lFound := s.findNodeDelete(key, &preds, &succs)
-		if isMarked || // this process mark this node or we can find this node in the skip list
-			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
-			if !isMarked { // we don't mark this node for now
-				nodeToDelete = succs[lFound]
-				topLayer = lFound
-				nodeToDelete.mu.Lock()
-				if nodeToDelete.flags.Get(marked) {
-					// The node is marked by another process,
-					// the physical deletion will be accomplished by another process.
-					nodeToDelete.mu.Unlock()
-					return nil, false
-				}
-				nodeToDelete.flags.SetTrue(marked)
-				isMarked = true
-			}
-			// Accomplish the physical deletion.
-			var (
-				highestLocked        = -1 // the highest level being locked by this process
-				valid                = true
-				pred, succ, prevPred *uint32Node
-			)
-			for layer := 0; valid && (layer <= topLayer); layer++ {
-				pred, succ = preds[layer], succs[layer]
-				if pred != prevPred { // the node in this layer could be locked by previous loop
-					pred.mu.Lock()
-					highestLocked = layer
-					prevPred = pred
-				}
-				// valid check if there is another node has inserted into the skip list in this layer
-				// during this process, or the previous is deleted by another process.
-				// It is valid if:
-				// 1. the previous node exists.
-				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
-			}
-			if !valid {
-				unlockUint32(preds, highestLocked)
-				continue
-			}
-			for i := topLayer; i >= 0; i-- {
-				// Now we own the `nodeToDelete`, no other goroutine will modify it.
-				// So we don't need `nodeToDelete.loadNext`
-				preds[i].storeNext(i, nodeToDelete.next[i])
-			}
-			nodeToDelete.mu.Unlock()
-			unlockUint32(preds, highestLocked)
-			atomic.AddInt64(&s.length, -1)
-			return nodeToDelete.loadVal(), true
-		}
-		return nil, false
-	}
-}
-
-// LoadOrStore returns the existing value for the key if present.
-// Otherwise, it stores and returns the given value.
-// The loaded result is true if the value was loaded, false if stored.
-func (s *Uint32Map) LoadOrStore(key uint32, value interface{}) (actual interface{}, loaded bool) {
-	value, ok := s.Load(key)
-	if !ok {
-		s.Store(key, value)
-		return nil, false
-	}
-	return value, true
-}
-
-// Delete deletes the value for a key.
-func (s *Uint32Map) Delete(key uint32) {
-	var (
-		nodeToDelete *uint32Node
-		isMarked     bool // represents if this operation mark the node
-		topLayer     = -1
-		preds, succs [maxLevel]*uint32Node
-	)
-	for {
-		lFound := s.findNodeDelete(key, &preds, &succs)
-		if isMarked || // this process mark this node or we can find this node in the skip list
-			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
-			if !isMarked { // we don't mark this node for now
-				nodeToDelete = succs[lFound]
-				topLayer = lFound
-				nodeToDelete.mu.Lock()
-				if nodeToDelete.flags.Get(marked) {
-					// The node is marked by another process,
-					// the physical deletion will be accomplished by another process.
-					nodeToDelete.mu.Unlock()
-					return // false
-				}
-				nodeToDelete.flags.SetTrue(marked)
-				isMarked = true
-			}
-			// Accomplish the physical deletion.
-			var (
-				highestLocked        = -1 // the highest level being locked by this process
-				valid                = true
-				pred, succ, prevPred *uint32Node
-			)
-			for layer := 0; valid && (layer <= topLayer); layer++ {
-				pred, succ = preds[layer], succs[layer]
-				if pred != prevPred { // the node in this layer could be locked by previous loop
-					pred.mu.Lock()
-					highestLocked = layer
-					prevPred = pred
-				}
-				// valid check if there is another node has inserted into the skip list in this layer
-				// during this process, or the previous is deleted by another process.
-				// It is valid if:
-				// 1. the previous node exists.
-				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
-			}
-			if !valid {
-				unlockUint32(preds, highestLocked)
-				continue
-			}
-			for i := topLayer; i >= 0; i-- {
-				// Now we own the `nodeToDelete`, no other goroutine will modify it.
-				// So we don't need `nodeToDelete.loadNext`
-				preds[i].storeNext(i, nodeToDelete.next[i])
-			}
-			nodeToDelete.mu.Unlock()
-			unlockUint32(preds, highestLocked)
-			atomic.AddInt64(&s.length, -1)
-			return // true
-		}
-		return // false
-	}
-}
-
-// Range calls f sequentially for each key and val present in the skipmap.
-// If f returns false, range stops the iteration.
-//
-// Range does not necessarily correspond to any consistent snapshot of the Map's
-// contents: no key will be visited more than once, but if the value for any key
-// is stored or deleted concurrently, Range may reflect any mapping for that key
-// from any point during the Range call.
-func (s *Uint32Map) Range(f func(key uint32, value interface{}) bool) {
-	x := s.header.loadNext(0)
-	for x != s.tail {
-		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
-			x = x.loadNext(0)
-			continue
-		}
-		if !f(x.score, x.loadVal()) {
-			break
-		}
-		x = x.loadNext(0)
-	}
-}
-
-// Len return the length of this skipmap.
-// Keep in sync with types_gen.go:lengthFunction
-// Special case for code generation, Must in the tail of skipmap.go.
-func (s *Uint32Map) Len() int {
 	return int(atomic.LoadInt64(&s.length))
 }
 
@@ -2032,12 +2032,12 @@ func (s *Uint64Map) LoadAndDelete(key uint64) (value interface{}, loaded bool) {
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (s *Uint64Map) LoadOrStore(key uint64, value interface{}) (actual interface{}, loaded bool) {
-	value, ok := s.Load(key)
+	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
 		return nil, false
 	}
-	return value, true
+	return loadedval, true
 }
 
 // Delete deletes the value for a key.
@@ -2128,6 +2128,714 @@ func (s *Uint64Map) Range(f func(key uint64, value interface{}) bool) {
 // Keep in sync with types_gen.go:lengthFunction
 // Special case for code generation, Must in the tail of skipmap.go.
 func (s *Uint64Map) Len() int {
+	return int(atomic.LoadInt64(&s.length))
+}
+
+// Uint32Map represents a map based on skip list in ascending order.
+type Uint32Map struct {
+	header *uint32Node
+	tail   *uint32Node
+	length int64
+}
+
+type uint32Node struct {
+	score uint32
+	val   unsafe.Pointer
+	next  []*uint32Node
+	mu    sync.Mutex
+	flags bitflag
+}
+
+func newUint32Node(score uint32, val interface{}, level int) *uint32Node {
+	n := &uint32Node{
+		score: score,
+		next:  make([]*uint32Node, level),
+	}
+	n.storeVal(val)
+	return n
+}
+
+func (n *uint32Node) storeVal(val interface{}) {
+	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+}
+
+func (n *uint32Node) loadVal() interface{} {
+	return *(*interface{})(atomic.LoadPointer(&n.val))
+}
+
+// loadNext return `n.next[i]`(atomic)
+func (n *uint32Node) loadNext(i int) *uint32Node {
+	return (*uint32Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
+}
+
+// storeNext same with `n.next[i] = val`(atomic)
+func (n *uint32Node) storeNext(i int, val *uint32Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+}
+
+// NewUint32 return an empty uint32 skipmap.
+func NewUint32() *Uint32Map {
+	h, t := newUint32Node(0, "", maxLevel), newUint32Node(0, "", maxLevel)
+	for i := 0; i < maxLevel; i++ {
+		h.next[i] = t
+	}
+	h.flags.SetTrue(fullyLinked)
+	t.flags.SetTrue(fullyLinked)
+	return &Uint32Map{
+		header: h,
+		tail:   t,
+	}
+}
+
+// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// (without fullpath, if find the node will return immediately)
+func (s *Uint32Map) findNode(score uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) *uint32Node {
+	x := s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		succ := x.loadNext(i)
+		for succ != s.tail && succ.score < score {
+			x = succ
+			succ = x.loadNext(i)
+		}
+		preds[i] = x
+		succs[i] = succ
+
+		// Check if the score already in the skipmap.
+		if succ != s.tail && score == succ.score {
+			return succ
+		}
+	}
+	return nil
+}
+
+// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > score >= succs[i].
+func (s *Uint32Map) findNodeDelete(score uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) int {
+	// lFound represents the index of the first layer at which it found a node.
+	lFound, x := -1, s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		succ := x.loadNext(i)
+		for succ != s.tail && succ.score < score {
+			x = succ
+			succ = x.loadNext(i)
+		}
+		preds[i] = x
+		succs[i] = succ
+
+		// Check if the score already in the skip list.
+		if lFound == -1 && succ != s.tail && score == succ.score {
+			lFound = i
+		}
+	}
+	return lFound
+}
+
+func unlockUint32(preds [maxLevel]*uint32Node, highestLevel int) {
+	var prevPred *uint32Node
+	for i := highestLevel; i >= 0; i-- {
+		if preds[i] != prevPred { // the node could be unlocked by previous loop
+			preds[i].mu.Unlock()
+			prevPred = preds[i]
+		}
+	}
+}
+
+// Store sets the value for a key.
+func (s *Uint32Map) Store(key uint32, value interface{}) {
+	level := randomLevel()
+	var preds, succs [maxLevel]*uint32Node
+	for {
+		nodeFound := s.findNode(key, &preds, &succs)
+		if nodeFound != nil { // indicating the score is already in the skip-list
+			if !nodeFound.flags.Get(marked) {
+				// We don't need to care about whether or not the node is fully linked,
+				// just replace the value.
+				nodeFound.storeVal(value)
+				return
+			}
+			// If the node is marked, represents some other goroutines is in the process of deleting this node,
+			// we need to add this node in next loop.
+			continue
+		}
+
+		// Add this node into skip list.
+		var (
+			highestLocked        = -1 // the highest level being locked by this process
+			valid                = true
+			pred, succ, prevPred *uint32Node
+		)
+		for layer := 0; valid && layer < level; layer++ {
+			pred = preds[layer]   // target node's previous node
+			succ = succs[layer]   // target node's next node
+			if pred != prevPred { // the node in this layer could be locked by previous loop
+				pred.mu.Lock()
+				highestLocked = layer
+				prevPred = pred
+			}
+			// valid check if there is another node has inserted into the skip list in this layer during this process.
+			// It is valid if:
+			// 1. The previous node and next node both are not marked.
+			// 2. The previous node's next node is succ in this layer.
+			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+		}
+		if !valid {
+			unlockUint32(preds, highestLocked)
+			continue
+		}
+
+		nn := newUint32Node(key, value, level)
+		for layer := 0; layer < level; layer++ {
+			nn.next[layer] = succs[layer]
+			preds[layer].storeNext(layer, nn)
+		}
+		nn.flags.SetTrue(fullyLinked)
+		unlockUint32(preds, highestLocked)
+		atomic.AddInt64(&s.length, 1)
+	}
+}
+
+// Load returns the value stored in the map for a key, or nil if no
+// value is present.
+// The ok result indicates whether value was found in the map.
+func (s *Uint32Map) Load(key uint32) (value interface{}, ok bool) {
+	x := s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		nex := x.loadNext(i)
+		for nex != s.tail && nex.score < key {
+			x = nex
+			nex = x.loadNext(i)
+		}
+
+		// Check if the score already in the skip list.
+		if nex != s.tail && key == nex.score {
+			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
+				return nex.loadVal(), true
+			}
+			return nil, false
+		}
+	}
+	return nil, false
+}
+
+// LoadAndDelete deletes the value for a key, returning the previous value if any.
+// The loaded result reports whether the key was present.
+func (s *Uint32Map) LoadAndDelete(key uint32) (value interface{}, loaded bool) {
+	var (
+		nodeToDelete *uint32Node
+		isMarked     bool // represents if this operation mark the node
+		topLayer     = -1
+		preds, succs [maxLevel]*uint32Node
+	)
+	for {
+		lFound := s.findNodeDelete(key, &preds, &succs)
+		if isMarked || // this process mark this node or we can find this node in the skip list
+			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
+			if !isMarked { // we don't mark this node for now
+				nodeToDelete = succs[lFound]
+				topLayer = lFound
+				nodeToDelete.mu.Lock()
+				if nodeToDelete.flags.Get(marked) {
+					// The node is marked by another process,
+					// the physical deletion will be accomplished by another process.
+					nodeToDelete.mu.Unlock()
+					return nil, false
+				}
+				nodeToDelete.flags.SetTrue(marked)
+				isMarked = true
+			}
+			// Accomplish the physical deletion.
+			var (
+				highestLocked        = -1 // the highest level being locked by this process
+				valid                = true
+				pred, succ, prevPred *uint32Node
+			)
+			for layer := 0; valid && (layer <= topLayer); layer++ {
+				pred, succ = preds[layer], succs[layer]
+				if pred != prevPred { // the node in this layer could be locked by previous loop
+					pred.mu.Lock()
+					highestLocked = layer
+					prevPred = pred
+				}
+				// valid check if there is another node has inserted into the skip list in this layer
+				// during this process, or the previous is deleted by another process.
+				// It is valid if:
+				// 1. the previous node exists.
+				// 2. no another node has inserted into the skip list in this layer.
+				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+			}
+			if !valid {
+				unlockUint32(preds, highestLocked)
+				continue
+			}
+			for i := topLayer; i >= 0; i-- {
+				// Now we own the `nodeToDelete`, no other goroutine will modify it.
+				// So we don't need `nodeToDelete.loadNext`
+				preds[i].storeNext(i, nodeToDelete.next[i])
+			}
+			nodeToDelete.mu.Unlock()
+			unlockUint32(preds, highestLocked)
+			atomic.AddInt64(&s.length, -1)
+			return nodeToDelete.loadVal(), true
+		}
+		return nil, false
+	}
+}
+
+// LoadOrStore returns the existing value for the key if present.
+// Otherwise, it stores and returns the given value.
+// The loaded result is true if the value was loaded, false if stored.
+func (s *Uint32Map) LoadOrStore(key uint32, value interface{}) (actual interface{}, loaded bool) {
+	loadedval, ok := s.Load(key)
+	if !ok {
+		s.Store(key, value)
+		return nil, false
+	}
+	return loadedval, true
+}
+
+// Delete deletes the value for a key.
+func (s *Uint32Map) Delete(key uint32) {
+	var (
+		nodeToDelete *uint32Node
+		isMarked     bool // represents if this operation mark the node
+		topLayer     = -1
+		preds, succs [maxLevel]*uint32Node
+	)
+	for {
+		lFound := s.findNodeDelete(key, &preds, &succs)
+		if isMarked || // this process mark this node or we can find this node in the skip list
+			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
+			if !isMarked { // we don't mark this node for now
+				nodeToDelete = succs[lFound]
+				topLayer = lFound
+				nodeToDelete.mu.Lock()
+				if nodeToDelete.flags.Get(marked) {
+					// The node is marked by another process,
+					// the physical deletion will be accomplished by another process.
+					nodeToDelete.mu.Unlock()
+					return // false
+				}
+				nodeToDelete.flags.SetTrue(marked)
+				isMarked = true
+			}
+			// Accomplish the physical deletion.
+			var (
+				highestLocked        = -1 // the highest level being locked by this process
+				valid                = true
+				pred, succ, prevPred *uint32Node
+			)
+			for layer := 0; valid && (layer <= topLayer); layer++ {
+				pred, succ = preds[layer], succs[layer]
+				if pred != prevPred { // the node in this layer could be locked by previous loop
+					pred.mu.Lock()
+					highestLocked = layer
+					prevPred = pred
+				}
+				// valid check if there is another node has inserted into the skip list in this layer
+				// during this process, or the previous is deleted by another process.
+				// It is valid if:
+				// 1. the previous node exists.
+				// 2. no another node has inserted into the skip list in this layer.
+				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+			}
+			if !valid {
+				unlockUint32(preds, highestLocked)
+				continue
+			}
+			for i := topLayer; i >= 0; i-- {
+				// Now we own the `nodeToDelete`, no other goroutine will modify it.
+				// So we don't need `nodeToDelete.loadNext`
+				preds[i].storeNext(i, nodeToDelete.next[i])
+			}
+			nodeToDelete.mu.Unlock()
+			unlockUint32(preds, highestLocked)
+			atomic.AddInt64(&s.length, -1)
+			return // true
+		}
+		return // false
+	}
+}
+
+// Range calls f sequentially for each key and val present in the skipmap.
+// If f returns false, range stops the iteration.
+//
+// Range does not necessarily correspond to any consistent snapshot of the Map's
+// contents: no key will be visited more than once, but if the value for any key
+// is stored or deleted concurrently, Range may reflect any mapping for that key
+// from any point during the Range call.
+func (s *Uint32Map) Range(f func(key uint32, value interface{}) bool) {
+	x := s.header.loadNext(0)
+	for x != s.tail {
+		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
+			x = x.loadNext(0)
+			continue
+		}
+		if !f(x.score, x.loadVal()) {
+			break
+		}
+		x = x.loadNext(0)
+	}
+}
+
+// Len return the length of this skipmap.
+// Keep in sync with types_gen.go:lengthFunction
+// Special case for code generation, Must in the tail of skipmap.go.
+func (s *Uint32Map) Len() int {
+	return int(atomic.LoadInt64(&s.length))
+}
+
+// Uint16Map represents a map based on skip list in ascending order.
+type Uint16Map struct {
+	header *uint16Node
+	tail   *uint16Node
+	length int64
+}
+
+type uint16Node struct {
+	score uint16
+	val   unsafe.Pointer
+	next  []*uint16Node
+	mu    sync.Mutex
+	flags bitflag
+}
+
+func newUint16Node(score uint16, val interface{}, level int) *uint16Node {
+	n := &uint16Node{
+		score: score,
+		next:  make([]*uint16Node, level),
+	}
+	n.storeVal(val)
+	return n
+}
+
+func (n *uint16Node) storeVal(val interface{}) {
+	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+}
+
+func (n *uint16Node) loadVal() interface{} {
+	return *(*interface{})(atomic.LoadPointer(&n.val))
+}
+
+// loadNext return `n.next[i]`(atomic)
+func (n *uint16Node) loadNext(i int) *uint16Node {
+	return (*uint16Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
+}
+
+// storeNext same with `n.next[i] = val`(atomic)
+func (n *uint16Node) storeNext(i int, val *uint16Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+}
+
+// NewUint16 return an empty uint16 skipmap.
+func NewUint16() *Uint16Map {
+	h, t := newUint16Node(0, "", maxLevel), newUint16Node(0, "", maxLevel)
+	for i := 0; i < maxLevel; i++ {
+		h.next[i] = t
+	}
+	h.flags.SetTrue(fullyLinked)
+	t.flags.SetTrue(fullyLinked)
+	return &Uint16Map{
+		header: h,
+		tail:   t,
+	}
+}
+
+// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// (without fullpath, if find the node will return immediately)
+func (s *Uint16Map) findNode(score uint16, preds *[maxLevel]*uint16Node, succs *[maxLevel]*uint16Node) *uint16Node {
+	x := s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		succ := x.loadNext(i)
+		for succ != s.tail && succ.score < score {
+			x = succ
+			succ = x.loadNext(i)
+		}
+		preds[i] = x
+		succs[i] = succ
+
+		// Check if the score already in the skipmap.
+		if succ != s.tail && score == succ.score {
+			return succ
+		}
+	}
+	return nil
+}
+
+// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > score >= succs[i].
+func (s *Uint16Map) findNodeDelete(score uint16, preds *[maxLevel]*uint16Node, succs *[maxLevel]*uint16Node) int {
+	// lFound represents the index of the first layer at which it found a node.
+	lFound, x := -1, s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		succ := x.loadNext(i)
+		for succ != s.tail && succ.score < score {
+			x = succ
+			succ = x.loadNext(i)
+		}
+		preds[i] = x
+		succs[i] = succ
+
+		// Check if the score already in the skip list.
+		if lFound == -1 && succ != s.tail && score == succ.score {
+			lFound = i
+		}
+	}
+	return lFound
+}
+
+func unlockUint16(preds [maxLevel]*uint16Node, highestLevel int) {
+	var prevPred *uint16Node
+	for i := highestLevel; i >= 0; i-- {
+		if preds[i] != prevPred { // the node could be unlocked by previous loop
+			preds[i].mu.Unlock()
+			prevPred = preds[i]
+		}
+	}
+}
+
+// Store sets the value for a key.
+func (s *Uint16Map) Store(key uint16, value interface{}) {
+	level := randomLevel()
+	var preds, succs [maxLevel]*uint16Node
+	for {
+		nodeFound := s.findNode(key, &preds, &succs)
+		if nodeFound != nil { // indicating the score is already in the skip-list
+			if !nodeFound.flags.Get(marked) {
+				// We don't need to care about whether or not the node is fully linked,
+				// just replace the value.
+				nodeFound.storeVal(value)
+				return
+			}
+			// If the node is marked, represents some other goroutines is in the process of deleting this node,
+			// we need to add this node in next loop.
+			continue
+		}
+
+		// Add this node into skip list.
+		var (
+			highestLocked        = -1 // the highest level being locked by this process
+			valid                = true
+			pred, succ, prevPred *uint16Node
+		)
+		for layer := 0; valid && layer < level; layer++ {
+			pred = preds[layer]   // target node's previous node
+			succ = succs[layer]   // target node's next node
+			if pred != prevPred { // the node in this layer could be locked by previous loop
+				pred.mu.Lock()
+				highestLocked = layer
+				prevPred = pred
+			}
+			// valid check if there is another node has inserted into the skip list in this layer during this process.
+			// It is valid if:
+			// 1. The previous node and next node both are not marked.
+			// 2. The previous node's next node is succ in this layer.
+			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+		}
+		if !valid {
+			unlockUint16(preds, highestLocked)
+			continue
+		}
+
+		nn := newUint16Node(key, value, level)
+		for layer := 0; layer < level; layer++ {
+			nn.next[layer] = succs[layer]
+			preds[layer].storeNext(layer, nn)
+		}
+		nn.flags.SetTrue(fullyLinked)
+		unlockUint16(preds, highestLocked)
+		atomic.AddInt64(&s.length, 1)
+	}
+}
+
+// Load returns the value stored in the map for a key, or nil if no
+// value is present.
+// The ok result indicates whether value was found in the map.
+func (s *Uint16Map) Load(key uint16) (value interface{}, ok bool) {
+	x := s.header
+	for i := maxLevel - 1; i >= 0; i-- {
+		nex := x.loadNext(i)
+		for nex != s.tail && nex.score < key {
+			x = nex
+			nex = x.loadNext(i)
+		}
+
+		// Check if the score already in the skip list.
+		if nex != s.tail && key == nex.score {
+			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
+				return nex.loadVal(), true
+			}
+			return nil, false
+		}
+	}
+	return nil, false
+}
+
+// LoadAndDelete deletes the value for a key, returning the previous value if any.
+// The loaded result reports whether the key was present.
+func (s *Uint16Map) LoadAndDelete(key uint16) (value interface{}, loaded bool) {
+	var (
+		nodeToDelete *uint16Node
+		isMarked     bool // represents if this operation mark the node
+		topLayer     = -1
+		preds, succs [maxLevel]*uint16Node
+	)
+	for {
+		lFound := s.findNodeDelete(key, &preds, &succs)
+		if isMarked || // this process mark this node or we can find this node in the skip list
+			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
+			if !isMarked { // we don't mark this node for now
+				nodeToDelete = succs[lFound]
+				topLayer = lFound
+				nodeToDelete.mu.Lock()
+				if nodeToDelete.flags.Get(marked) {
+					// The node is marked by another process,
+					// the physical deletion will be accomplished by another process.
+					nodeToDelete.mu.Unlock()
+					return nil, false
+				}
+				nodeToDelete.flags.SetTrue(marked)
+				isMarked = true
+			}
+			// Accomplish the physical deletion.
+			var (
+				highestLocked        = -1 // the highest level being locked by this process
+				valid                = true
+				pred, succ, prevPred *uint16Node
+			)
+			for layer := 0; valid && (layer <= topLayer); layer++ {
+				pred, succ = preds[layer], succs[layer]
+				if pred != prevPred { // the node in this layer could be locked by previous loop
+					pred.mu.Lock()
+					highestLocked = layer
+					prevPred = pred
+				}
+				// valid check if there is another node has inserted into the skip list in this layer
+				// during this process, or the previous is deleted by another process.
+				// It is valid if:
+				// 1. the previous node exists.
+				// 2. no another node has inserted into the skip list in this layer.
+				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+			}
+			if !valid {
+				unlockUint16(preds, highestLocked)
+				continue
+			}
+			for i := topLayer; i >= 0; i-- {
+				// Now we own the `nodeToDelete`, no other goroutine will modify it.
+				// So we don't need `nodeToDelete.loadNext`
+				preds[i].storeNext(i, nodeToDelete.next[i])
+			}
+			nodeToDelete.mu.Unlock()
+			unlockUint16(preds, highestLocked)
+			atomic.AddInt64(&s.length, -1)
+			return nodeToDelete.loadVal(), true
+		}
+		return nil, false
+	}
+}
+
+// LoadOrStore returns the existing value for the key if present.
+// Otherwise, it stores and returns the given value.
+// The loaded result is true if the value was loaded, false if stored.
+func (s *Uint16Map) LoadOrStore(key uint16, value interface{}) (actual interface{}, loaded bool) {
+	loadedval, ok := s.Load(key)
+	if !ok {
+		s.Store(key, value)
+		return nil, false
+	}
+	return loadedval, true
+}
+
+// Delete deletes the value for a key.
+func (s *Uint16Map) Delete(key uint16) {
+	var (
+		nodeToDelete *uint16Node
+		isMarked     bool // represents if this operation mark the node
+		topLayer     = -1
+		preds, succs [maxLevel]*uint16Node
+	)
+	for {
+		lFound := s.findNodeDelete(key, &preds, &succs)
+		if isMarked || // this process mark this node or we can find this node in the skip list
+			lFound != -1 && succs[lFound].flags.MGet(fullyLinked|marked, fullyLinked) && (len(succs[lFound].next)-1) == lFound {
+			if !isMarked { // we don't mark this node for now
+				nodeToDelete = succs[lFound]
+				topLayer = lFound
+				nodeToDelete.mu.Lock()
+				if nodeToDelete.flags.Get(marked) {
+					// The node is marked by another process,
+					// the physical deletion will be accomplished by another process.
+					nodeToDelete.mu.Unlock()
+					return // false
+				}
+				nodeToDelete.flags.SetTrue(marked)
+				isMarked = true
+			}
+			// Accomplish the physical deletion.
+			var (
+				highestLocked        = -1 // the highest level being locked by this process
+				valid                = true
+				pred, succ, prevPred *uint16Node
+			)
+			for layer := 0; valid && (layer <= topLayer); layer++ {
+				pred, succ = preds[layer], succs[layer]
+				if pred != prevPred { // the node in this layer could be locked by previous loop
+					pred.mu.Lock()
+					highestLocked = layer
+					prevPred = pred
+				}
+				// valid check if there is another node has inserted into the skip list in this layer
+				// during this process, or the previous is deleted by another process.
+				// It is valid if:
+				// 1. the previous node exists.
+				// 2. no another node has inserted into the skip list in this layer.
+				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+			}
+			if !valid {
+				unlockUint16(preds, highestLocked)
+				continue
+			}
+			for i := topLayer; i >= 0; i-- {
+				// Now we own the `nodeToDelete`, no other goroutine will modify it.
+				// So we don't need `nodeToDelete.loadNext`
+				preds[i].storeNext(i, nodeToDelete.next[i])
+			}
+			nodeToDelete.mu.Unlock()
+			unlockUint16(preds, highestLocked)
+			atomic.AddInt64(&s.length, -1)
+			return // true
+		}
+		return // false
+	}
+}
+
+// Range calls f sequentially for each key and val present in the skipmap.
+// If f returns false, range stops the iteration.
+//
+// Range does not necessarily correspond to any consistent snapshot of the Map's
+// contents: no key will be visited more than once, but if the value for any key
+// is stored or deleted concurrently, Range may reflect any mapping for that key
+// from any point during the Range call.
+func (s *Uint16Map) Range(f func(key uint16, value interface{}) bool) {
+	x := s.header.loadNext(0)
+	for x != s.tail {
+		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
+			x = x.loadNext(0)
+			continue
+		}
+		if !f(x.score, x.loadVal()) {
+			break
+		}
+		x = x.loadNext(0)
+	}
+}
+
+// Len return the length of this skipmap.
+// Keep in sync with types_gen.go:lengthFunction
+// Special case for code generation, Must in the tail of skipmap.go.
+func (s *Uint16Map) Len() int {
 	return int(atomic.LoadInt64(&s.length))
 }
 
@@ -2386,12 +3094,12 @@ func (s *UintMap) LoadAndDelete(key uint) (value interface{}, loaded bool) {
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (s *UintMap) LoadOrStore(key uint, value interface{}) (actual interface{}, loaded bool) {
-	value, ok := s.Load(key)
+	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
 		return nil, false
 	}
-	return value, true
+	return loadedval, true
 }
 
 // Delete deletes the value for a key.

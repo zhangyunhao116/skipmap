@@ -10,7 +10,7 @@ import (
 )
 
 func TestSyncMap(t *testing.T) {
-	m := NewInt64()
+	m := NewInt()
 
 	// Correctness.
 	m.Store(123, "123")
@@ -62,7 +62,7 @@ func TestSyncMap(t *testing.T) {
 		t.Fatal("invalid")
 	}
 
-	m.Range(func(key int64, value interface{}) bool {
+	m.Range(func(key int, value interface{}) bool {
 		if key == 123 {
 			m.Store(123, 123)
 		} else if key == 456 {
@@ -82,7 +82,7 @@ func TestSyncMap(t *testing.T) {
 		i := i
 		wg.Add(1)
 		go func() {
-			m.Store(int64(i), int(i+1000))
+			m.Store(i, int(i+1000))
 			wg.Done()
 		}()
 	}
@@ -96,7 +96,7 @@ func TestSyncMap(t *testing.T) {
 	wg.Add(1)
 	var count int64
 	go func() {
-		m.Range(func(key int64, val interface{}) bool {
+		m.Range(func(key int, val interface{}) bool {
 			atomic.AddInt64(&count, 1)
 			return true
 		})

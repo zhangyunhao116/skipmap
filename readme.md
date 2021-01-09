@@ -4,7 +4,7 @@
 
 ## Introduction
 
-skipmap is a high-performance concurrent map based on skip list. In typical pattern(one million operations, 90%CONTAINS 9%INSERT 1%DELETE), the skipmap up to 3x ~ 10x faster than the built-in sync.Map.
+skipmap is a high-performance concurrent map based on skip list. In typical pattern(one million operations, 90%LOAD 9%STORE 1%DELETE), the skipmap up to 3x ~ 10x faster than the built-in sync.Map.
 
 The main idea behind the skipmap is [A Simple Optimistic Skiplist Algorithm](<https://people.csail.mit.edu/shanir/publications/LazySkipList.pdf>).
 
@@ -15,7 +15,7 @@ Different from the sync.Map, the items in the skipmap are always sorted, and the
 ## Features
 
 - Concurrent safe API with high-performance.
-- Wait-free Contains and Range operations.
+- Wait-free Load and Range operations.
 - Sorted items.
 
 
@@ -29,7 +29,7 @@ In these situations, `skipmap` is better
 
 In these situations, `sync.Map` is better
 
-- Only one goroutine use the map for most of the time, such as insert a batch of elements and then use only `Load` (use built-in map is even better), 
+- Only one goroutine use the map for most of the time, such as insert a batch of elements and then use only `Load` (use built-in map is even better).
 
 
 
@@ -43,7 +43,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/ZYunH/skipmap"
+	"github.com/zhangyunhao116/skipmap"
 )
 
 func main() {

@@ -201,7 +201,7 @@ func Benchmark1Delete9Store90Load(b *testing.B) {
 				u := fastrandn(100)
 				if u < 9 {
 					l.Store(int64(fastrandn(randN)), nil)
-				} else if u == 2 {
+				} else if u == 10 {
 					l.Delete(int64(fastrandn(randN)))
 				} else {
 					l.Load(int64(fastrandn(randN)))
@@ -220,7 +220,7 @@ func Benchmark1Delete9Store90Load(b *testing.B) {
 				u := fastrandn(100)
 				if u < 9 {
 					l.Store(int64(fastrandn(randN)), nil)
-				} else if u == 2 {
+				} else if u == 10 {
 					l.Delete(int64(fastrandn(randN)))
 				} else {
 					l.Load(int64(fastrandn(randN)))
@@ -373,9 +373,9 @@ func BenchmarkString1Delete9Store90Load(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				u := fastrandn(100)
-				if u == 1 {
+				if u < 9 {
 					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
-				} else if u == 2 {
+				} else if u == 10 {
 					l.Delete(strconv.Itoa(int(fastrandn(randN))))
 				} else {
 					l.Load(strconv.Itoa(int(fastrandn(randN))))
@@ -392,9 +392,9 @@ func BenchmarkString1Delete9Store90Load(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				u := fastrandn(100)
-				if u == 1 {
+				if u < 9 {
 					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
-				} else if u == 2 {
+				} else if u == 10 {
 					l.Delete(strconv.Itoa(int(fastrandn(randN))))
 				} else {
 					l.Load(strconv.Itoa(int(fastrandn(randN))))

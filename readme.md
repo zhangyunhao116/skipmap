@@ -29,13 +29,13 @@ In these situations, `skipmap` is better
 
 In these situations, `sync.Map` is better
 
-- Only one goroutine use the map for most of the time, such as insert a batch of elements and then use only `Load` (use built-in map is even better).
+- Only one goroutine access the map for most of the time, such as insert a batch of elements and then use only `Load` (use built-in map is even better).
 
 
 
 ## QuickStart
 
-See [Go doc](https://pkg.go.dev/github.com/ZYunH/skipmap) for more information.
+See [Go doc](https://pkg.go.dev/github.com/zhangyunhao116/skipmap) for more information.
 
 ```go
 package main

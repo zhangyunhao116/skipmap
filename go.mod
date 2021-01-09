@@ -1,4 +1,4 @@
-module github.com/ZYunH/skipmap
+module github.com/zhangyunhao116/skipmap
 
 go 1.15
 

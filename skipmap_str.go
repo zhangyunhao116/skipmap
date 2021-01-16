@@ -5,12 +5,11 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/zeebo/xxh3"
+	"github.com/zhangyunhao116/wyhash"
 )
 
-// TODO
-func xxh3Hash(s string) uint64 {
-	return xxh3.HashString(s)
+func hash(s string) uint64 {
+	return wyhash.Sum64String(s)
 }
 
 // StringMap represents a map based on skip list in ascending order.
@@ -32,7 +31,7 @@ type stringNode struct {
 func newStringNode(key string, val interface{}, level int) *stringNode {
 	n := &stringNode{
 		key:   key,
-		score: xxh3Hash(key),
+		score: hash(key),
 		next:  make([]*stringNode, level),
 	}
 	n.storeVal(val)
@@ -85,7 +84,7 @@ func NewString() *StringMap {
 // The returned preds and succs always satisfy preds[i] > score > succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *StringMap) findNode(key string, preds *[maxLevel]*stringNode, succs *[maxLevel]*stringNode) *stringNode {
-	score := xxh3Hash(key)
+	score := hash(key)
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
@@ -108,7 +107,7 @@ func (s *StringMap) findNode(key string, preds *[maxLevel]*stringNode, succs *[m
 // The returned preds and succs always satisfy preds[i] > score >= succs[i].
 func (s *StringMap) findNodeDelete(key string, preds *[maxLevel]*stringNode, succs *[maxLevel]*stringNode) int {
 	// lFound represents the index of the first layer at which it found a node.
-	score := xxh3Hash(key)
+	score := hash(key)
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
@@ -196,7 +195,7 @@ func (s *StringMap) Store(key string, value interface{}) {
 // value is present.
 // The ok result indicates whether value was found in the map.
 func (s *StringMap) Load(key string) (value interface{}, ok bool) {
-	score := xxh3Hash(key)
+	score := hash(key)
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)

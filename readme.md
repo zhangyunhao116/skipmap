@@ -73,7 +73,7 @@ func main() {
 
 ## Benchmark
 
-Go version: go1.15.6 linux/amd64
+Go version: go1.16.2 linux/amd64
 
 CPU: AMD 3700x(8C16T), running at 3.6GHz
 
@@ -90,35 +90,35 @@ $ benchstat x.txt
 
 ```
 name                                           time/op
-Store/skipmap-16                                267ns ± 5%
-Store/sync.Map-16                               675ns ± 6%
-Load100Hits/skipmap-16                         15.2ns ± 6%
-Load100Hits/sync.Map-16                        16.0ns ±11%
-Load50Hits/skipmap-16                          15.6ns ± 7%
-Load50Hits/sync.Map-16                         14.2ns ±18%
-LoadNoHits/skipmap-16                          16.7ns ±21%
-LoadNoHits/sync.Map-16                         13.1ns ±18%
-50Store50Load/skipmap-16                        151ns ±38%
-50Store50Load/sync.Map-16                       568ns ± 2%
-30Store70Load/skipmap-16                       95.2ns ±43%
-30Store70Load/sync.Map-16                       584ns ± 4%
-1Delete9Store90Load/skipmap-16                 46.0ns ±11%
-1Delete9Store90Load/sync.Map-16                 505ns ± 4%
-1Range9Delete90Store900Load/skipmap-16         52.5ns ± 8%
-1Range9Delete90Store900Load/sync.Map-16        1.15µs ±18%
-StringStore/skipmap-16                          321ns ± 7%
-StringStore/sync.Map-16                         872ns ± 4%
-StringLoad50Hits/skipmap-16                    28.6ns ± 6%
-StringLoad50Hits/sync.Map-16                   18.7ns ± 8%
-String30Store70Load/skipmap-16                  125ns ± 5%
-String30Store70Load/sync.Map-16                 746ns ± 6%
-String1Delete9Store90Load/skipmap-16           56.9ns ± 8%
-String1Delete9Store90Load/sync.Map-16           619ns ± 3%
-String1Range9Delete90Store900Load/skipmap-16   64.8ns ±24%
-String1Range9Delete90Store900Load/sync.Map-16  1.46µs ±20%
+Store/skipmap-16                                237ns ± 8%
+Store/sync.Map-16                               676ns ± 5%
+Load100Hits/skipmap-16                         13.2ns ±11%
+Load100Hits/sync.Map-16                        14.7ns ±13%
+Load50Hits/skipmap-16                          13.4ns ±16%
+Load50Hits/sync.Map-16                         14.5ns ±22%
+LoadNoHits/skipmap-16                          13.5ns ± 9%
+LoadNoHits/sync.Map-16                         12.6ns ±16%
+50Store50Load/skipmap-16                        132ns ± 3%
+50Store50Load/sync.Map-16                       555ns ± 5%
+30Store70Load/skipmap-16                       85.8ns ± 3%
+30Store70Load/sync.Map-16                       577ns ± 5%
+1Delete9Store90Load/skipmap-16                 46.4ns ±10%
+1Delete9Store90Load/sync.Map-16                 494ns ± 5%
+1Range9Delete90Store900Load/skipmap-16         53.0ns ± 8%
+1Range9Delete90Store900Load/sync.Map-16        1.16µs ± 9%
+StringStore/skipmap-16                          274ns ± 5%
+StringStore/sync.Map-16                         876ns ± 5%
+StringLoad50Hits/skipmap-16                    22.1ns ±14%
+StringLoad50Hits/sync.Map-16                   18.9ns ±13%
+String30Store70Load/skipmap-16                  118ns ±16%
+String30Store70Load/sync.Map-16                 743ns ± 7%
+String1Delete9Store90Load/skipmap-16           54.6ns ±13%
+String1Delete9Store90Load/sync.Map-16           606ns ± 4%
+String1Range9Delete90Store900Load/skipmap-16   62.1ns ±17%
+String1Range9Delete90Store900Load/sync.Map-16  1.37µs ±21%
 
 name                                           alloc/op
-Store/skipmap-16                                 107B ± 0%
+Store/skipmap-16                                 106B ± 0%
 Store/sync.Map-16                                128B ± 0%
 Load100Hits/skipmap-16                          0.00B     
 Load100Hits/sync.Map-16                         0.00B     
@@ -127,21 +127,21 @@ Load50Hits/sync.Map-16                          0.00B
 LoadNoHits/skipmap-16                           0.00B     
 LoadNoHits/sync.Map-16                          0.00B     
 50Store50Load/skipmap-16                        53.0B ± 0%
-50Store50Load/sync.Map-16                       65.2B ± 1%
+50Store50Load/sync.Map-16                       64.6B ± 2%
 30Store70Load/skipmap-16                        32.0B ± 0%
-30Store70Load/sync.Map-16                       74.4B ± 3%
+30Store70Load/sync.Map-16                       74.7B ± 8%
 1Delete9Store90Load/skipmap-16                  9.00B ± 0%
-1Delete9Store90Load/sync.Map-16                 55.4B ± 3%
+1Delete9Store90Load/sync.Map-16                 55.0B ± 0%
 1Range9Delete90Store900Load/skipmap-16          9.00B ± 0%
-1Range9Delete90Store900Load/sync.Map-16          286B ± 9%
+1Range9Delete90Store900Load/sync.Map-16          295B ± 6%
 StringStore/skipmap-16                           138B ± 0%
 StringStore/sync.Map-16                          152B ± 0%
 StringLoad50Hits/skipmap-16                     3.00B ± 0%
 StringLoad50Hits/sync.Map-16                    3.00B ± 0%
 String30Store70Load/skipmap-16                  52.0B ± 0%
-String30Store70Load/sync.Map-16                 96.6B ±13%
+String30Store70Load/sync.Map-16                 97.2B ±12%
 String1Delete9Store90Load/skipmap-16            26.0B ± 0%
-String1Delete9Store90Load/sync.Map-16           72.3B ± 1%
+String1Delete9Store90Load/sync.Map-16           72.6B ± 2%
 String1Range9Delete90Store900Load/skipmap-16    26.0B ± 0%
-String1Range9Delete90Store900Load/sync.Map-16    333B ±23%
+String1Range9Delete90Store900Load/sync.Map-16    309B ±28%
 ```

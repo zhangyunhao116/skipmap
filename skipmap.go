@@ -15,28 +15,28 @@ type Int64Map struct {
 }
 
 type int64Node struct {
-	score int64
-	val   unsafe.Pointer
+	key   int64
+	value unsafe.Pointer
 	next  []*int64Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newInt64Node(score int64, val interface{}, level int) *int64Node {
+func newInt64Node(key int64, value interface{}, level int) *int64Node {
 	n := &int64Node{
-		score: score,
-		next:  make([]*int64Node, level),
+		key:  key,
+		next: make([]*int64Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *int64Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *int64Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *int64Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -44,9 +44,9 @@ func (n *int64Node) loadNext(i int) *int64Node {
 	return (*int64Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *int64Node) storeNext(i int, val *int64Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *int64Node) storeNext(i int, value *int64Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewInt64 return an empty int64 skipmap.
@@ -63,44 +63,44 @@ func NewInt64() *Int64Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Int64Map) findNode(score int64, preds *[maxLevel]*int64Node, succs *[maxLevel]*int64Node) *int64Node {
+func (s *Int64Map) findNode(key int64, preds *[maxLevel]*int64Node, succs *[maxLevel]*int64Node) *int64Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Int64Map) findNodeDelete(score int64, preds *[maxLevel]*int64Node, succs *[maxLevel]*int64Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Int64Map) findNodeDelete(key int64, preds *[maxLevel]*int64Node, succs *[maxLevel]*int64Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -123,7 +123,7 @@ func (s *Int64Map) Store(key int64, value interface{}) {
 	var preds, succs [maxLevel]*int64Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -178,13 +178,13 @@ func (s *Int64Map) Load(key int64) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -333,7 +333,7 @@ func (s *Int64Map) Delete(key int64) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -347,7 +347,7 @@ func (s *Int64Map) Range(f func(key int64, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)

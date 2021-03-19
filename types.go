@@ -15,28 +15,28 @@ type Float32Map struct {
 }
 
 type float32Node struct {
-	score float32
-	val   unsafe.Pointer
+	key   float32
+	value unsafe.Pointer
 	next  []*float32Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newFloat32Node(score float32, val interface{}, level int) *float32Node {
+func newFloat32Node(key float32, value interface{}, level int) *float32Node {
 	n := &float32Node{
-		score: score,
-		next:  make([]*float32Node, level),
+		key:  key,
+		next: make([]*float32Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *float32Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *float32Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *float32Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -44,9 +44,9 @@ func (n *float32Node) loadNext(i int) *float32Node {
 	return (*float32Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *float32Node) storeNext(i int, val *float32Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *float32Node) storeNext(i int, value *float32Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewFloat32 return an empty float32 skipmap.
@@ -63,44 +63,44 @@ func NewFloat32() *Float32Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Float32Map) findNode(score float32, preds *[maxLevel]*float32Node, succs *[maxLevel]*float32Node) *float32Node {
+func (s *Float32Map) findNode(key float32, preds *[maxLevel]*float32Node, succs *[maxLevel]*float32Node) *float32Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Float32Map) findNodeDelete(score float32, preds *[maxLevel]*float32Node, succs *[maxLevel]*float32Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Float32Map) findNodeDelete(key float32, preds *[maxLevel]*float32Node, succs *[maxLevel]*float32Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -123,7 +123,7 @@ func (s *Float32Map) Store(key float32, value interface{}) {
 	var preds, succs [maxLevel]*float32Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -178,13 +178,13 @@ func (s *Float32Map) Load(key float32) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -333,7 +333,7 @@ func (s *Float32Map) Delete(key float32) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -347,7 +347,7 @@ func (s *Float32Map) Range(f func(key float32, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -369,28 +369,28 @@ type Float64Map struct {
 }
 
 type float64Node struct {
-	score float64
-	val   unsafe.Pointer
+	key   float64
+	value unsafe.Pointer
 	next  []*float64Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newFloat64Node(score float64, val interface{}, level int) *float64Node {
+func newFloat64Node(key float64, value interface{}, level int) *float64Node {
 	n := &float64Node{
-		score: score,
-		next:  make([]*float64Node, level),
+		key:  key,
+		next: make([]*float64Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *float64Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *float64Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *float64Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -398,9 +398,9 @@ func (n *float64Node) loadNext(i int) *float64Node {
 	return (*float64Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *float64Node) storeNext(i int, val *float64Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *float64Node) storeNext(i int, value *float64Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewFloat64 return an empty float64 skipmap.
@@ -417,44 +417,44 @@ func NewFloat64() *Float64Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Float64Map) findNode(score float64, preds *[maxLevel]*float64Node, succs *[maxLevel]*float64Node) *float64Node {
+func (s *Float64Map) findNode(key float64, preds *[maxLevel]*float64Node, succs *[maxLevel]*float64Node) *float64Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Float64Map) findNodeDelete(score float64, preds *[maxLevel]*float64Node, succs *[maxLevel]*float64Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Float64Map) findNodeDelete(key float64, preds *[maxLevel]*float64Node, succs *[maxLevel]*float64Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -477,7 +477,7 @@ func (s *Float64Map) Store(key float64, value interface{}) {
 	var preds, succs [maxLevel]*float64Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -532,13 +532,13 @@ func (s *Float64Map) Load(key float64) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -687,7 +687,7 @@ func (s *Float64Map) Delete(key float64) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -701,7 +701,7 @@ func (s *Float64Map) Range(f func(key float64, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -723,28 +723,28 @@ type Int32Map struct {
 }
 
 type int32Node struct {
-	score int32
-	val   unsafe.Pointer
+	key   int32
+	value unsafe.Pointer
 	next  []*int32Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newInt32Node(score int32, val interface{}, level int) *int32Node {
+func newInt32Node(key int32, value interface{}, level int) *int32Node {
 	n := &int32Node{
-		score: score,
-		next:  make([]*int32Node, level),
+		key:  key,
+		next: make([]*int32Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *int32Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *int32Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *int32Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -752,9 +752,9 @@ func (n *int32Node) loadNext(i int) *int32Node {
 	return (*int32Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *int32Node) storeNext(i int, val *int32Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *int32Node) storeNext(i int, value *int32Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewInt32 return an empty int32 skipmap.
@@ -771,44 +771,44 @@ func NewInt32() *Int32Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Int32Map) findNode(score int32, preds *[maxLevel]*int32Node, succs *[maxLevel]*int32Node) *int32Node {
+func (s *Int32Map) findNode(key int32, preds *[maxLevel]*int32Node, succs *[maxLevel]*int32Node) *int32Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Int32Map) findNodeDelete(score int32, preds *[maxLevel]*int32Node, succs *[maxLevel]*int32Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Int32Map) findNodeDelete(key int32, preds *[maxLevel]*int32Node, succs *[maxLevel]*int32Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -831,7 +831,7 @@ func (s *Int32Map) Store(key int32, value interface{}) {
 	var preds, succs [maxLevel]*int32Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -886,13 +886,13 @@ func (s *Int32Map) Load(key int32) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -1041,7 +1041,7 @@ func (s *Int32Map) Delete(key int32) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -1055,7 +1055,7 @@ func (s *Int32Map) Range(f func(key int32, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -1077,28 +1077,28 @@ type Int16Map struct {
 }
 
 type int16Node struct {
-	score int16
-	val   unsafe.Pointer
+	key   int16
+	value unsafe.Pointer
 	next  []*int16Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newInt16Node(score int16, val interface{}, level int) *int16Node {
+func newInt16Node(key int16, value interface{}, level int) *int16Node {
 	n := &int16Node{
-		score: score,
-		next:  make([]*int16Node, level),
+		key:  key,
+		next: make([]*int16Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *int16Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *int16Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *int16Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -1106,9 +1106,9 @@ func (n *int16Node) loadNext(i int) *int16Node {
 	return (*int16Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *int16Node) storeNext(i int, val *int16Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *int16Node) storeNext(i int, value *int16Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewInt16 return an empty int16 skipmap.
@@ -1125,44 +1125,44 @@ func NewInt16() *Int16Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Int16Map) findNode(score int16, preds *[maxLevel]*int16Node, succs *[maxLevel]*int16Node) *int16Node {
+func (s *Int16Map) findNode(key int16, preds *[maxLevel]*int16Node, succs *[maxLevel]*int16Node) *int16Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Int16Map) findNodeDelete(score int16, preds *[maxLevel]*int16Node, succs *[maxLevel]*int16Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Int16Map) findNodeDelete(key int16, preds *[maxLevel]*int16Node, succs *[maxLevel]*int16Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -1185,7 +1185,7 @@ func (s *Int16Map) Store(key int16, value interface{}) {
 	var preds, succs [maxLevel]*int16Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -1240,13 +1240,13 @@ func (s *Int16Map) Load(key int16) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -1395,7 +1395,7 @@ func (s *Int16Map) Delete(key int16) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -1409,7 +1409,7 @@ func (s *Int16Map) Range(f func(key int16, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -1431,28 +1431,28 @@ type IntMap struct {
 }
 
 type intNode struct {
-	score int
-	val   unsafe.Pointer
+	key   int
+	value unsafe.Pointer
 	next  []*intNode
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newIntNode(score int, val interface{}, level int) *intNode {
+func newIntNode(key int, value interface{}, level int) *intNode {
 	n := &intNode{
-		score: score,
-		next:  make([]*intNode, level),
+		key:  key,
+		next: make([]*intNode, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *intNode) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *intNode) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *intNode) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -1460,9 +1460,9 @@ func (n *intNode) loadNext(i int) *intNode {
 	return (*intNode)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *intNode) storeNext(i int, val *intNode) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *intNode) storeNext(i int, value *intNode) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewInt return an empty int skipmap.
@@ -1479,44 +1479,44 @@ func NewInt() *IntMap {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *IntMap) findNode(score int, preds *[maxLevel]*intNode, succs *[maxLevel]*intNode) *intNode {
+func (s *IntMap) findNode(key int, preds *[maxLevel]*intNode, succs *[maxLevel]*intNode) *intNode {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *IntMap) findNodeDelete(score int, preds *[maxLevel]*intNode, succs *[maxLevel]*intNode) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *IntMap) findNodeDelete(key int, preds *[maxLevel]*intNode, succs *[maxLevel]*intNode) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -1539,7 +1539,7 @@ func (s *IntMap) Store(key int, value interface{}) {
 	var preds, succs [maxLevel]*intNode
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -1594,13 +1594,13 @@ func (s *IntMap) Load(key int) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -1749,7 +1749,7 @@ func (s *IntMap) Delete(key int) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -1763,7 +1763,7 @@ func (s *IntMap) Range(f func(key int, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -1785,28 +1785,28 @@ type Uint64Map struct {
 }
 
 type uint64Node struct {
-	score uint64
-	val   unsafe.Pointer
+	key   uint64
+	value unsafe.Pointer
 	next  []*uint64Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newUint64Node(score uint64, val interface{}, level int) *uint64Node {
+func newUint64Node(key uint64, value interface{}, level int) *uint64Node {
 	n := &uint64Node{
-		score: score,
-		next:  make([]*uint64Node, level),
+		key:  key,
+		next: make([]*uint64Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *uint64Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *uint64Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *uint64Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -1814,9 +1814,9 @@ func (n *uint64Node) loadNext(i int) *uint64Node {
 	return (*uint64Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *uint64Node) storeNext(i int, val *uint64Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *uint64Node) storeNext(i int, value *uint64Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewUint64 return an empty uint64 skipmap.
@@ -1833,44 +1833,44 @@ func NewUint64() *Uint64Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Uint64Map) findNode(score uint64, preds *[maxLevel]*uint64Node, succs *[maxLevel]*uint64Node) *uint64Node {
+func (s *Uint64Map) findNode(key uint64, preds *[maxLevel]*uint64Node, succs *[maxLevel]*uint64Node) *uint64Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Uint64Map) findNodeDelete(score uint64, preds *[maxLevel]*uint64Node, succs *[maxLevel]*uint64Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Uint64Map) findNodeDelete(key uint64, preds *[maxLevel]*uint64Node, succs *[maxLevel]*uint64Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -1893,7 +1893,7 @@ func (s *Uint64Map) Store(key uint64, value interface{}) {
 	var preds, succs [maxLevel]*uint64Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -1948,13 +1948,13 @@ func (s *Uint64Map) Load(key uint64) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -2103,7 +2103,7 @@ func (s *Uint64Map) Delete(key uint64) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -2117,7 +2117,7 @@ func (s *Uint64Map) Range(f func(key uint64, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -2139,28 +2139,28 @@ type Uint32Map struct {
 }
 
 type uint32Node struct {
-	score uint32
-	val   unsafe.Pointer
+	key   uint32
+	value unsafe.Pointer
 	next  []*uint32Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newUint32Node(score uint32, val interface{}, level int) *uint32Node {
+func newUint32Node(key uint32, value interface{}, level int) *uint32Node {
 	n := &uint32Node{
-		score: score,
-		next:  make([]*uint32Node, level),
+		key:  key,
+		next: make([]*uint32Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *uint32Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *uint32Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *uint32Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -2168,9 +2168,9 @@ func (n *uint32Node) loadNext(i int) *uint32Node {
 	return (*uint32Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *uint32Node) storeNext(i int, val *uint32Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *uint32Node) storeNext(i int, value *uint32Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewUint32 return an empty uint32 skipmap.
@@ -2187,44 +2187,44 @@ func NewUint32() *Uint32Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Uint32Map) findNode(score uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) *uint32Node {
+func (s *Uint32Map) findNode(key uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) *uint32Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Uint32Map) findNodeDelete(score uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Uint32Map) findNodeDelete(key uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -2247,7 +2247,7 @@ func (s *Uint32Map) Store(key uint32, value interface{}) {
 	var preds, succs [maxLevel]*uint32Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -2302,13 +2302,13 @@ func (s *Uint32Map) Load(key uint32) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -2457,7 +2457,7 @@ func (s *Uint32Map) Delete(key uint32) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -2471,7 +2471,7 @@ func (s *Uint32Map) Range(f func(key uint32, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -2493,28 +2493,28 @@ type Uint16Map struct {
 }
 
 type uint16Node struct {
-	score uint16
-	val   unsafe.Pointer
+	key   uint16
+	value unsafe.Pointer
 	next  []*uint16Node
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newUint16Node(score uint16, val interface{}, level int) *uint16Node {
+func newUint16Node(key uint16, value interface{}, level int) *uint16Node {
 	n := &uint16Node{
-		score: score,
-		next:  make([]*uint16Node, level),
+		key:  key,
+		next: make([]*uint16Node, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *uint16Node) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *uint16Node) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *uint16Node) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -2522,9 +2522,9 @@ func (n *uint16Node) loadNext(i int) *uint16Node {
 	return (*uint16Node)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *uint16Node) storeNext(i int, val *uint16Node) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *uint16Node) storeNext(i int, value *uint16Node) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewUint16 return an empty uint16 skipmap.
@@ -2541,44 +2541,44 @@ func NewUint16() *Uint16Map {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *Uint16Map) findNode(score uint16, preds *[maxLevel]*uint16Node, succs *[maxLevel]*uint16Node) *uint16Node {
+func (s *Uint16Map) findNode(key uint16, preds *[maxLevel]*uint16Node, succs *[maxLevel]*uint16Node) *uint16Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *Uint16Map) findNodeDelete(score uint16, preds *[maxLevel]*uint16Node, succs *[maxLevel]*uint16Node) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *Uint16Map) findNodeDelete(key uint16, preds *[maxLevel]*uint16Node, succs *[maxLevel]*uint16Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -2601,7 +2601,7 @@ func (s *Uint16Map) Store(key uint16, value interface{}) {
 	var preds, succs [maxLevel]*uint16Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -2656,13 +2656,13 @@ func (s *Uint16Map) Load(key uint16) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -2811,7 +2811,7 @@ func (s *Uint16Map) Delete(key uint16) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -2825,7 +2825,7 @@ func (s *Uint16Map) Range(f func(key uint16, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)
@@ -2847,28 +2847,28 @@ type UintMap struct {
 }
 
 type uintNode struct {
-	score uint
-	val   unsafe.Pointer
+	key   uint
+	value unsafe.Pointer
 	next  []*uintNode
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newUintNode(score uint, val interface{}, level int) *uintNode {
+func newUintNode(key uint, value interface{}, level int) *uintNode {
 	n := &uintNode{
-		score: score,
-		next:  make([]*uintNode, level),
+		key:  key,
+		next: make([]*uintNode, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *uintNode) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *uintNode) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *uintNode) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // loadNext return `n.next[i]`(atomic)
@@ -2876,9 +2876,9 @@ func (n *uintNode) loadNext(i int) *uintNode {
 	return (*uintNode)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *uintNode) storeNext(i int, val *uintNode) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *uintNode) storeNext(i int, value *uintNode) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewUint return an empty uint skipmap.
@@ -2895,44 +2895,44 @@ func NewUint() *UintMap {
 	}
 }
 
-// findNode takes a score and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > score > succs[i].
+// findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
+// The returned preds and succs always satisfy preds[i] > key > succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *UintMap) findNode(score uint, preds *[maxLevel]*uintNode, succs *[maxLevel]*uintNode) *uintNode {
+func (s *UintMap) findNode(key uint, preds *[maxLevel]*uintNode, succs *[maxLevel]*uintNode) *uintNode {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skipmap.
-		if succ != s.tail && score == succ.score {
+		// Check if the key already in the skipmap.
+		if succ != s.tail && key == succ.key {
 			return succ
 		}
 	}
 	return nil
 }
 
-// findNodeDelete takes a score and two maximal-height arrays then searches exactly as in a sequential skip-list.
-// The returned preds and succs always satisfy preds[i] > score >= succs[i].
-func (s *UintMap) findNodeDelete(score uint, preds *[maxLevel]*uintNode, succs *[maxLevel]*uintNode) int {
+// findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
+func (s *UintMap) findNodeDelete(key uint, preds *[maxLevel]*uintNode, succs *[maxLevel]*uintNode) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.score < score {
+		for succ != s.tail && succ.key < key {
 			x = succ
 			succ = x.loadNext(i)
 		}
 		preds[i] = x
 		succs[i] = succ
 
-		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && score == succ.score {
+		// Check if the key already in the skip list.
+		if lFound == -1 && succ != s.tail && key == succ.key {
 			lFound = i
 		}
 	}
@@ -2955,7 +2955,7 @@ func (s *UintMap) Store(key uint, value interface{}) {
 	var preds, succs [maxLevel]*uintNode
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
-		if nodeFound != nil { // indicating the score is already in the skip-list
+		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
@@ -3010,13 +3010,13 @@ func (s *UintMap) Load(key uint) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.score < key {
+		for nex != s.tail && nex.key < key {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
-		// Check if the score already in the skip list.
-		if nex != s.tail && key == nex.score {
+		// Check if the key already in the skip list.
+		if nex != s.tail && key == nex.key {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -3165,7 +3165,7 @@ func (s *UintMap) Delete(key uint) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's
@@ -3179,7 +3179,7 @@ func (s *UintMap) Range(f func(key uint, value interface{}) bool) {
 			x = x.loadNext(0)
 			continue
 		}
-		if !f(x.score, x.loadVal()) {
+		if !f(x.key, x.loadVal()) {
 			break
 		}
 		x = x.loadNext(0)

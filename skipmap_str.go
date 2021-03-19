@@ -22,28 +22,28 @@ type StringMap struct {
 type stringNode struct {
 	key   string
 	score uint64
-	val   unsafe.Pointer
+	value unsafe.Pointer
 	next  []*stringNode
 	mu    sync.Mutex
 	flags bitflag
 }
 
-func newStringNode(key string, val interface{}, level int) *stringNode {
+func newStringNode(key string, value interface{}, level int) *stringNode {
 	n := &stringNode{
 		key:   key,
 		score: hash(key),
 		next:  make([]*stringNode, level),
 	}
-	n.storeVal(val)
+	n.storeVal(value)
 	return n
 }
 
-func (n *stringNode) storeVal(val interface{}) {
-	atomic.StorePointer(&n.val, unsafe.Pointer(&val))
+func (n *stringNode) storeVal(value interface{}) {
+	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
 func (n *stringNode) loadVal() interface{} {
-	return *(*interface{})(atomic.LoadPointer(&n.val))
+	return *(*interface{})(atomic.LoadPointer(&n.value))
 }
 
 // cmp return 1 if n is bigger, 0 if equal, else -1.
@@ -61,9 +61,9 @@ func (n *stringNode) loadNext(i int) *stringNode {
 	return (*stringNode)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i]))))
 }
 
-// storeNext same with `n.next[i] = val`(atomic)
-func (n *stringNode) storeNext(i int, val *stringNode) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(val))
+// storeNext same with `n.next[i] = value`(atomic)
+func (n *stringNode) storeNext(i int, value *stringNode) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
 // NewString return an empty int64 skipmap.
@@ -354,7 +354,7 @@ func (s *StringMap) Delete(key string) {
 	}
 }
 
-// Range calls f sequentially for each key and val present in the skipmap.
+// Range calls f sequentially for each key and value present in the skipmap.
 // If f returns false, range stops the iteration.
 //
 // Range does not necessarily correspond to any consistent snapshot of the Map's

@@ -153,7 +153,7 @@ func (s *Int64Map) Store(key int64, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockInt64(preds, highestLocked)
@@ -238,7 +238,7 @@ func (s *Int64Map) LoadAndDelete(key int64) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockInt64(preds, highestLocked)

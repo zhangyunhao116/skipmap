@@ -49,6 +49,14 @@ func (n *int64Node) storeNext(i int, value *int64Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *int64Node) lessthan(key int64) bool {
+	return n.key < key
+}
+
+func (n *int64Node) equal(key int64) bool {
+	return n.key == key
+}
+
 // NewInt64 return an empty int64 skipmap.
 func NewInt64() *Int64Map {
 	h, t := newInt64Node(0, "", maxLevel), newInt64Node(0, "", maxLevel)
@@ -64,13 +72,13 @@ func NewInt64() *Int64Map {
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Int64Map) findNode(key int64, preds *[maxLevel]*int64Node, succs *[maxLevel]*int64Node) *int64Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != s.tail && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -78,7 +86,7 @@ func (s *Int64Map) findNode(key int64, preds *[maxLevel]*int64Node, succs *[maxL
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != s.tail && succ.equal(key) {
 			return succ
 		}
 	}
@@ -92,7 +100,7 @@ func (s *Int64Map) findNodeDelete(key int64, preds *[maxLevel]*int64Node, succs 
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != s.tail && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -100,7 +108,7 @@ func (s *Int64Map) findNodeDelete(key int64, preds *[maxLevel]*int64Node, succs 
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != s.tail && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -178,13 +186,13 @@ func (s *Int64Map) Load(key int64) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != s.tail && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != s.tail && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}

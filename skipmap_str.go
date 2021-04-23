@@ -15,7 +15,6 @@ func hash(s string) uint64 {
 // StringMap represents a map based on skip list in ascending order.
 type StringMap struct {
 	header *stringNode
-	tail   *stringNode
 	length int64
 }
 
@@ -68,15 +67,10 @@ func (n *stringNode) storeNext(i int, value *stringNode) {
 
 // NewString return an empty int64 skipmap.
 func NewString() *StringMap {
-	h, t := newStringNode("", "", maxLevel), newStringNode("", "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newStringNode("", "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &StringMap{
 		header: h,
-		tail:   t,
 	}
 }
 
@@ -88,7 +82,7 @@ func (s *StringMap) findNode(key string, preds *[maxLevel]*stringNode, succs *[m
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.cmp(score, key) < 0 {
+		for succ != nil && succ.cmp(score, key) < 0 {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -96,7 +90,7 @@ func (s *StringMap) findNode(key string, preds *[maxLevel]*stringNode, succs *[m
 		succs[i] = succ
 
 		// Check if the score already in the skipmap.
-		if succ != s.tail && succ.cmp(score, key) == 0 {
+		if succ != nil && succ.cmp(score, key) == 0 {
 			return succ
 		}
 	}
@@ -111,7 +105,7 @@ func (s *StringMap) findNodeDelete(key string, preds *[maxLevel]*stringNode, suc
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.cmp(score, key) < 0 {
+		for succ != nil && succ.cmp(score, key) < 0 {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -119,7 +113,7 @@ func (s *StringMap) findNodeDelete(key string, preds *[maxLevel]*stringNode, suc
 		succs[i] = succ
 
 		// Check if the score already in the skip list.
-		if lFound == -1 && succ != s.tail && succ.cmp(score, key) == 0 {
+		if lFound == -1 && succ != nil && succ.cmp(score, key) == 0 {
 			lFound = i
 		}
 	}
@@ -173,7 +167,7 @@ func (s *StringMap) Store(key string, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.loadNext(layer) == succ
 		}
 		if !valid {
 			unlockString(preds, highestLocked)
@@ -199,13 +193,13 @@ func (s *StringMap) Load(key string) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.cmp(score, key) < 0 {
+		for nex != nil && nex.cmp(score, key) < 0 {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the score already in the skip list.
-		if nex != s.tail && nex.cmp(score, key) == 0 {
+		if nex != nil && nex.cmp(score, key) == 0 {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -363,7 +357,7 @@ func (s *StringMap) Delete(key string) {
 // from any point during the Range call.
 func (s *StringMap) Range(f func(key string, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue

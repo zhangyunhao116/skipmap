@@ -10,7 +10,6 @@ import (
 // Float32Map represents a map based on skip list in ascending order.
 type Float32Map struct {
 	header *float32Node
-	tail   *float32Node
 	length int64
 }
 
@@ -49,28 +48,31 @@ func (n *float32Node) storeNext(i int, value *float32Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *float32Node) lessthan(key float32) bool {
+	return n.key < key
+}
+
+func (n *float32Node) equal(key float32) bool {
+	return n.key == key
+}
+
 // NewFloat32 return an empty float32 skipmap.
 func NewFloat32() *Float32Map {
-	h, t := newFloat32Node(0, "", maxLevel), newFloat32Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newFloat32Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &Float32Map{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Float32Map) findNode(key float32, preds *[maxLevel]*float32Node, succs *[maxLevel]*float32Node) *float32Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -78,7 +80,7 @@ func (s *Float32Map) findNode(key float32, preds *[maxLevel]*float32Node, succs 
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -92,7 +94,7 @@ func (s *Float32Map) findNodeDelete(key float32, preds *[maxLevel]*float32Node, 
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -100,7 +102,7 @@ func (s *Float32Map) findNodeDelete(key float32, preds *[maxLevel]*float32Node, 
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -153,7 +155,7 @@ func (s *Float32Map) Store(key float32, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockFloat32(preds, highestLocked)
@@ -178,13 +180,13 @@ func (s *Float32Map) Load(key float32) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -238,7 +240,7 @@ func (s *Float32Map) LoadAndDelete(key float32) (value interface{}, loaded bool)
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockFloat32(preds, highestLocked)
@@ -342,7 +344,7 @@ func (s *Float32Map) Delete(key float32) {
 // from any point during the Range call.
 func (s *Float32Map) Range(f func(key float32, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -364,7 +366,6 @@ func (s *Float32Map) Len() int {
 // Float64Map represents a map based on skip list in ascending order.
 type Float64Map struct {
 	header *float64Node
-	tail   *float64Node
 	length int64
 }
 
@@ -403,28 +404,31 @@ func (n *float64Node) storeNext(i int, value *float64Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *float64Node) lessthan(key float64) bool {
+	return n.key < key
+}
+
+func (n *float64Node) equal(key float64) bool {
+	return n.key == key
+}
+
 // NewFloat64 return an empty float64 skipmap.
 func NewFloat64() *Float64Map {
-	h, t := newFloat64Node(0, "", maxLevel), newFloat64Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newFloat64Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &Float64Map{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Float64Map) findNode(key float64, preds *[maxLevel]*float64Node, succs *[maxLevel]*float64Node) *float64Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -432,7 +436,7 @@ func (s *Float64Map) findNode(key float64, preds *[maxLevel]*float64Node, succs 
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -446,7 +450,7 @@ func (s *Float64Map) findNodeDelete(key float64, preds *[maxLevel]*float64Node, 
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -454,7 +458,7 @@ func (s *Float64Map) findNodeDelete(key float64, preds *[maxLevel]*float64Node, 
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -507,7 +511,7 @@ func (s *Float64Map) Store(key float64, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockFloat64(preds, highestLocked)
@@ -532,13 +536,13 @@ func (s *Float64Map) Load(key float64) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -592,7 +596,7 @@ func (s *Float64Map) LoadAndDelete(key float64) (value interface{}, loaded bool)
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockFloat64(preds, highestLocked)
@@ -696,7 +700,7 @@ func (s *Float64Map) Delete(key float64) {
 // from any point during the Range call.
 func (s *Float64Map) Range(f func(key float64, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -718,7 +722,6 @@ func (s *Float64Map) Len() int {
 // Int32Map represents a map based on skip list in ascending order.
 type Int32Map struct {
 	header *int32Node
-	tail   *int32Node
 	length int64
 }
 
@@ -757,28 +760,31 @@ func (n *int32Node) storeNext(i int, value *int32Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *int32Node) lessthan(key int32) bool {
+	return n.key < key
+}
+
+func (n *int32Node) equal(key int32) bool {
+	return n.key == key
+}
+
 // NewInt32 return an empty int32 skipmap.
 func NewInt32() *Int32Map {
-	h, t := newInt32Node(0, "", maxLevel), newInt32Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newInt32Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &Int32Map{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Int32Map) findNode(key int32, preds *[maxLevel]*int32Node, succs *[maxLevel]*int32Node) *int32Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -786,7 +792,7 @@ func (s *Int32Map) findNode(key int32, preds *[maxLevel]*int32Node, succs *[maxL
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -800,7 +806,7 @@ func (s *Int32Map) findNodeDelete(key int32, preds *[maxLevel]*int32Node, succs 
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -808,7 +814,7 @@ func (s *Int32Map) findNodeDelete(key int32, preds *[maxLevel]*int32Node, succs 
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -861,7 +867,7 @@ func (s *Int32Map) Store(key int32, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockInt32(preds, highestLocked)
@@ -886,13 +892,13 @@ func (s *Int32Map) Load(key int32) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -946,7 +952,7 @@ func (s *Int32Map) LoadAndDelete(key int32) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockInt32(preds, highestLocked)
@@ -1050,7 +1056,7 @@ func (s *Int32Map) Delete(key int32) {
 // from any point during the Range call.
 func (s *Int32Map) Range(f func(key int32, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -1072,7 +1078,6 @@ func (s *Int32Map) Len() int {
 // Int16Map represents a map based on skip list in ascending order.
 type Int16Map struct {
 	header *int16Node
-	tail   *int16Node
 	length int64
 }
 
@@ -1111,28 +1116,31 @@ func (n *int16Node) storeNext(i int, value *int16Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *int16Node) lessthan(key int16) bool {
+	return n.key < key
+}
+
+func (n *int16Node) equal(key int16) bool {
+	return n.key == key
+}
+
 // NewInt16 return an empty int16 skipmap.
 func NewInt16() *Int16Map {
-	h, t := newInt16Node(0, "", maxLevel), newInt16Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newInt16Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &Int16Map{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Int16Map) findNode(key int16, preds *[maxLevel]*int16Node, succs *[maxLevel]*int16Node) *int16Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -1140,7 +1148,7 @@ func (s *Int16Map) findNode(key int16, preds *[maxLevel]*int16Node, succs *[maxL
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -1154,7 +1162,7 @@ func (s *Int16Map) findNodeDelete(key int16, preds *[maxLevel]*int16Node, succs 
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -1162,7 +1170,7 @@ func (s *Int16Map) findNodeDelete(key int16, preds *[maxLevel]*int16Node, succs 
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -1215,7 +1223,7 @@ func (s *Int16Map) Store(key int16, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockInt16(preds, highestLocked)
@@ -1240,13 +1248,13 @@ func (s *Int16Map) Load(key int16) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -1300,7 +1308,7 @@ func (s *Int16Map) LoadAndDelete(key int16) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockInt16(preds, highestLocked)
@@ -1404,7 +1412,7 @@ func (s *Int16Map) Delete(key int16) {
 // from any point during the Range call.
 func (s *Int16Map) Range(f func(key int16, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -1426,7 +1434,6 @@ func (s *Int16Map) Len() int {
 // IntMap represents a map based on skip list in ascending order.
 type IntMap struct {
 	header *intNode
-	tail   *intNode
 	length int64
 }
 
@@ -1465,28 +1472,31 @@ func (n *intNode) storeNext(i int, value *intNode) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *intNode) lessthan(key int) bool {
+	return n.key < key
+}
+
+func (n *intNode) equal(key int) bool {
+	return n.key == key
+}
+
 // NewInt return an empty int skipmap.
 func NewInt() *IntMap {
-	h, t := newIntNode(0, "", maxLevel), newIntNode(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newIntNode(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &IntMap{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *IntMap) findNode(key int, preds *[maxLevel]*intNode, succs *[maxLevel]*intNode) *intNode {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -1494,7 +1504,7 @@ func (s *IntMap) findNode(key int, preds *[maxLevel]*intNode, succs *[maxLevel]*
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -1508,7 +1518,7 @@ func (s *IntMap) findNodeDelete(key int, preds *[maxLevel]*intNode, succs *[maxL
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -1516,7 +1526,7 @@ func (s *IntMap) findNodeDelete(key int, preds *[maxLevel]*intNode, succs *[maxL
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -1569,7 +1579,7 @@ func (s *IntMap) Store(key int, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockInt(preds, highestLocked)
@@ -1594,13 +1604,13 @@ func (s *IntMap) Load(key int) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -1654,7 +1664,7 @@ func (s *IntMap) LoadAndDelete(key int) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockInt(preds, highestLocked)
@@ -1758,7 +1768,7 @@ func (s *IntMap) Delete(key int) {
 // from any point during the Range call.
 func (s *IntMap) Range(f func(key int, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -1780,7 +1790,6 @@ func (s *IntMap) Len() int {
 // Uint64Map represents a map based on skip list in ascending order.
 type Uint64Map struct {
 	header *uint64Node
-	tail   *uint64Node
 	length int64
 }
 
@@ -1819,28 +1828,31 @@ func (n *uint64Node) storeNext(i int, value *uint64Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *uint64Node) lessthan(key uint64) bool {
+	return n.key < key
+}
+
+func (n *uint64Node) equal(key uint64) bool {
+	return n.key == key
+}
+
 // NewUint64 return an empty uint64 skipmap.
 func NewUint64() *Uint64Map {
-	h, t := newUint64Node(0, "", maxLevel), newUint64Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newUint64Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &Uint64Map{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Uint64Map) findNode(key uint64, preds *[maxLevel]*uint64Node, succs *[maxLevel]*uint64Node) *uint64Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -1848,7 +1860,7 @@ func (s *Uint64Map) findNode(key uint64, preds *[maxLevel]*uint64Node, succs *[m
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -1862,7 +1874,7 @@ func (s *Uint64Map) findNodeDelete(key uint64, preds *[maxLevel]*uint64Node, suc
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -1870,7 +1882,7 @@ func (s *Uint64Map) findNodeDelete(key uint64, preds *[maxLevel]*uint64Node, suc
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -1923,7 +1935,7 @@ func (s *Uint64Map) Store(key uint64, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockUint64(preds, highestLocked)
@@ -1948,13 +1960,13 @@ func (s *Uint64Map) Load(key uint64) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -2008,7 +2020,7 @@ func (s *Uint64Map) LoadAndDelete(key uint64) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockUint64(preds, highestLocked)
@@ -2112,7 +2124,7 @@ func (s *Uint64Map) Delete(key uint64) {
 // from any point during the Range call.
 func (s *Uint64Map) Range(f func(key uint64, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -2134,7 +2146,6 @@ func (s *Uint64Map) Len() int {
 // Uint32Map represents a map based on skip list in ascending order.
 type Uint32Map struct {
 	header *uint32Node
-	tail   *uint32Node
 	length int64
 }
 
@@ -2173,28 +2184,31 @@ func (n *uint32Node) storeNext(i int, value *uint32Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *uint32Node) lessthan(key uint32) bool {
+	return n.key < key
+}
+
+func (n *uint32Node) equal(key uint32) bool {
+	return n.key == key
+}
+
 // NewUint32 return an empty uint32 skipmap.
 func NewUint32() *Uint32Map {
-	h, t := newUint32Node(0, "", maxLevel), newUint32Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newUint32Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &Uint32Map{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Uint32Map) findNode(key uint32, preds *[maxLevel]*uint32Node, succs *[maxLevel]*uint32Node) *uint32Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -2202,7 +2216,7 @@ func (s *Uint32Map) findNode(key uint32, preds *[maxLevel]*uint32Node, succs *[m
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -2216,7 +2230,7 @@ func (s *Uint32Map) findNodeDelete(key uint32, preds *[maxLevel]*uint32Node, suc
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -2224,7 +2238,7 @@ func (s *Uint32Map) findNodeDelete(key uint32, preds *[maxLevel]*uint32Node, suc
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -2277,7 +2291,7 @@ func (s *Uint32Map) Store(key uint32, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockUint32(preds, highestLocked)
@@ -2302,13 +2316,13 @@ func (s *Uint32Map) Load(key uint32) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -2362,7 +2376,7 @@ func (s *Uint32Map) LoadAndDelete(key uint32) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockUint32(preds, highestLocked)
@@ -2466,7 +2480,7 @@ func (s *Uint32Map) Delete(key uint32) {
 // from any point during the Range call.
 func (s *Uint32Map) Range(f func(key uint32, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -2488,7 +2502,6 @@ func (s *Uint32Map) Len() int {
 // Uint16Map represents a map based on skip list in ascending order.
 type Uint16Map struct {
 	header *uint16Node
-	tail   *uint16Node
 	length int64
 }
 
@@ -2527,28 +2540,31 @@ func (n *uint16Node) storeNext(i int, value *uint16Node) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *uint16Node) lessthan(key uint16) bool {
+	return n.key < key
+}
+
+func (n *uint16Node) equal(key uint16) bool {
+	return n.key == key
+}
+
 // NewUint16 return an empty uint16 skipmap.
 func NewUint16() *Uint16Map {
-	h, t := newUint16Node(0, "", maxLevel), newUint16Node(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newUint16Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &Uint16Map{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *Uint16Map) findNode(key uint16, preds *[maxLevel]*uint16Node, succs *[maxLevel]*uint16Node) *uint16Node {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -2556,7 +2572,7 @@ func (s *Uint16Map) findNode(key uint16, preds *[maxLevel]*uint16Node, succs *[m
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -2570,7 +2586,7 @@ func (s *Uint16Map) findNodeDelete(key uint16, preds *[maxLevel]*uint16Node, suc
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -2578,7 +2594,7 @@ func (s *Uint16Map) findNodeDelete(key uint16, preds *[maxLevel]*uint16Node, suc
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -2631,7 +2647,7 @@ func (s *Uint16Map) Store(key uint16, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockUint16(preds, highestLocked)
@@ -2656,13 +2672,13 @@ func (s *Uint16Map) Load(key uint16) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -2716,7 +2732,7 @@ func (s *Uint16Map) LoadAndDelete(key uint16) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockUint16(preds, highestLocked)
@@ -2820,7 +2836,7 @@ func (s *Uint16Map) Delete(key uint16) {
 // from any point during the Range call.
 func (s *Uint16Map) Range(f func(key uint16, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue
@@ -2842,7 +2858,6 @@ func (s *Uint16Map) Len() int {
 // UintMap represents a map based on skip list in ascending order.
 type UintMap struct {
 	header *uintNode
-	tail   *uintNode
 	length int64
 }
 
@@ -2881,28 +2896,31 @@ func (n *uintNode) storeNext(i int, value *uintNode) {
 	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next[i])), unsafe.Pointer(value))
 }
 
+func (n *uintNode) lessthan(key uint) bool {
+	return n.key < key
+}
+
+func (n *uintNode) equal(key uint) bool {
+	return n.key == key
+}
+
 // NewUint return an empty uint skipmap.
 func NewUint() *UintMap {
-	h, t := newUintNode(0, "", maxLevel), newUintNode(0, "", maxLevel)
-	for i := 0; i < maxLevel; i++ {
-		h.next[i] = t
-	}
+	h := newUintNode(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
-	t.flags.SetTrue(fullyLinked)
 	return &UintMap{
 		header: h,
-		tail:   t,
 	}
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
-// The returned preds and succs always satisfy preds[i] > key > succs[i].
+// The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
 func (s *UintMap) findNode(key uint, preds *[maxLevel]*uintNode, succs *[maxLevel]*uintNode) *uintNode {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -2910,7 +2928,7 @@ func (s *UintMap) findNode(key uint, preds *[maxLevel]*uintNode, succs *[maxLeve
 		succs[i] = succ
 
 		// Check if the key already in the skipmap.
-		if succ != s.tail && key == succ.key {
+		if succ != nil && succ.equal(key) {
 			return succ
 		}
 	}
@@ -2924,7 +2942,7 @@ func (s *UintMap) findNodeDelete(key uint, preds *[maxLevel]*uintNode, succs *[m
 	lFound, x := -1, s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
-		for succ != s.tail && succ.key < key {
+		for succ != nil && succ.lessthan(key) {
 			x = succ
 			succ = x.loadNext(i)
 		}
@@ -2932,7 +2950,7 @@ func (s *UintMap) findNodeDelete(key uint, preds *[maxLevel]*uintNode, succs *[m
 		succs[i] = succ
 
 		// Check if the key already in the skip list.
-		if lFound == -1 && succ != s.tail && key == succ.key {
+		if lFound == -1 && succ != nil && succ.equal(key) {
 			lFound = i
 		}
 	}
@@ -2985,7 +3003,7 @@ func (s *UintMap) Store(key uint, value interface{}) {
 			// It is valid if:
 			// 1. The previous node and next node both are not marked.
 			// 2. The previous node's next node is succ in this layer.
-			valid = !pred.flags.Get(marked) && !succ.flags.Get(marked) && pred.loadNext(layer) == succ
+			valid = !pred.flags.Get(marked) && (succ == nil || !succ.flags.Get(marked)) && pred.next[layer] == succ
 		}
 		if !valid {
 			unlockUint(preds, highestLocked)
@@ -3010,13 +3028,13 @@ func (s *UintMap) Load(key uint) (value interface{}, ok bool) {
 	x := s.header
 	for i := maxLevel - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
-		for nex != s.tail && nex.key < key {
+		for nex != nil && nex.lessthan(key) {
 			x = nex
 			nex = x.loadNext(i)
 		}
 
 		// Check if the key already in the skip list.
-		if nex != s.tail && key == nex.key {
+		if nex != nil && nex.equal(key) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
@@ -3070,7 +3088,7 @@ func (s *UintMap) LoadAndDelete(key uint) (value interface{}, loaded bool) {
 				// It is valid if:
 				// 1. the previous node exists.
 				// 2. no another node has inserted into the skip list in this layer.
-				valid = !pred.flags.Get(marked) && pred.loadNext(layer) == succ
+				valid = !pred.flags.Get(marked) && pred.next[layer] == succ
 			}
 			if !valid {
 				unlockUint(preds, highestLocked)
@@ -3174,7 +3192,7 @@ func (s *UintMap) Delete(key uint) {
 // from any point during the Range call.
 func (s *UintMap) Range(f func(key uint, value interface{}) bool) {
 	x := s.header.loadNext(0)
-	for x != s.tail {
+	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
 			x = x.loadNext(0)
 			continue

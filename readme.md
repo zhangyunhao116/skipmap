@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ZYunH/public-data/master/skipmap-logo.png"/>
+  <img src="https://raw.githubusercontent.com/zhangyunhao116/public-data/master/skipmap-logo.png"/>
 </p>
 
 ## Introduction
@@ -81,7 +81,7 @@ OS: ubuntu 18.04
 
 MEMORY: 16G x 2 (3200MHz)
 
-![benchmark](https://raw.githubusercontent.com/ZYunH/public-data/master/skipmap-benchmark.png)
+![benchmark](https://raw.githubusercontent.com/zhangyunhao116/public-data/master/skipmap-benchmark.png)
 
 ```shell
 $ go test -run=NOTEST -bench=. -benchtime=100000x -benchmem -count=10 -timeout=60m  > x.txt

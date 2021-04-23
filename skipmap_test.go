@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestSyncMap(t *testing.T) {
+func TestSkipMap(t *testing.T) {
 	m := NewInt()
 
 	// Correctness.
@@ -117,6 +117,22 @@ func TestSyncMap(t *testing.T) {
 	if m.Len() != 999 || int(count) != m.Len() {
 		t.Fatal("fail")
 	}
+}
+
+func TestSkipMapDesc(t *testing.T) {
+	m := NewIntDesc()
+	cases := []int{10, 11, 12}
+	for _, v := range cases {
+		m.Store(v, nil)
+	}
+	i := len(cases) - 1
+	m.Range(func(key int, value interface{}) bool {
+		if key != cases[i] {
+			t.Fail()
+		}
+		i--
+		return true
+	})
 }
 
 /* Test from sync.Map */

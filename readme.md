@@ -4,33 +4,29 @@
 
 ## Introduction
 
-skipmap is a high-performance concurrent map based on skip list. In typical pattern(one million operations, 90%LOAD 9%STORE 1%DELETE), the skipmap up to 3x ~ 10x faster than the built-in sync.Map.
+skipmap is a high-performance, scalable, concurrent-safe map based on skip-list. In the typical pattern(100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipmap up to 10x faster than the built-in sync.Map.
 
 The main idea behind the skipmap is [A Simple Optimistic Skiplist Algorithm](<https://people.csail.mit.edu/shanir/publications/LazySkipList.pdf>).
 
-Different from the sync.Map, the items in the skipmap are always sorted, and the `Load` and `Range` operations are wait-free (A goroutine is guaranteed to complete a operation as long as it keeps taking steps, regardless of the activity of other goroutines).
-
+Different from the sync.Map, the keys in the skipmap are always sorted, and the `Load` and `Range` operations are wait-free (A goroutine is guaranteed to complete an operation as long as it keeps taking steps, regardless of the activity of other goroutines).
 
 
 ## Features
 
-- Concurrent safe API with high-performance.
-- Wait-free Load and Range operations.
+- Scalable, high-performance, concurrent-safe.
+- Wait-free Load and Range operations (wait-free algorithms have stronger guarantees than lock-free).
 - Sorted items.
 
 
 
 ## When should you use skipmap
 
-In these situations, `skipmap` is better
+In most cases, `skipmap` is better than `sync.Map`, especially in these situations: 
 
-- **Sorted elements is needed**.
-- **Concurrent calls multiple operations**. such as use both `Load` and `Store` at the same time.
+- **Sorted keys are needed**.
+- **Concurrent calls multiple operations**. Such as use both `Range` and `Store` at the same time, in this situation, use skipmap can obtain very large improvement on performance.
 
-In these situations, `sync.Map` is better
-
-- Only one goroutine access the map for most of the time, such as insert a batch of elements and then use only `Load` (use built-in map is even better).
-
+If only one goroutine access the map for the most of the time, such as insert a batch of elements and then use only `Load` or `Range`, use built-in map is better.
 
 
 ## QuickStart

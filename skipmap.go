@@ -1,6 +1,6 @@
 // Package skipmap is a high-performance, scalable, concurrent-safe map based on skip-list.
-// In the typical pattern(100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipset
-// up to 15x faster than the built-in sync.Map.
+// In the typical pattern(100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipmap
+// up to 10x faster than the built-in sync.Map.
 package skipmap
 
 import (

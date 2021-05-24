@@ -117,6 +117,9 @@ func TestSkipMap(t *testing.T) {
 	if m.Len() != 999 || int(count) != m.Len() {
 		t.Fatal("fail")
 	}
+	// Correctness 2.
+	m = NewInt()
+	m.LoadOrStore(10, 10)
 }
 
 func TestSkipMapDesc(t *testing.T) {

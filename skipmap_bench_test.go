@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/zhangyunhao116/fastrand"
 )
 
 const initsize = 1 << 10 // for `load` `1Delete9Store90Load` `1Range9Delete90Store900Load`
@@ -16,7 +18,7 @@ func BenchmarkStore(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				l.Store(int64(fastrandn(randN)), nil)
+				l.Store(int64(fastrand.Uint32n(randN)), nil)
 			}
 		})
 	})
@@ -25,7 +27,7 @@ func BenchmarkStore(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				l.Store(int64(fastrandn(randN)), nil)
+				l.Store(int64(fastrand.Uint32n(randN)), nil)
 			}
 		})
 	})
@@ -40,7 +42,7 @@ func BenchmarkLoad100Hits(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(int64(fastrandn(initsize)))
+				_, _ = l.Load(int64(fastrand.Uint32n(initsize)))
 			}
 		})
 	})
@@ -52,7 +54,7 @@ func BenchmarkLoad100Hits(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(int64(fastrandn(initsize)))
+				_, _ = l.Load(int64(fastrand.Uint32n(initsize)))
 			}
 		})
 	})
@@ -63,28 +65,28 @@ func BenchmarkLoad50Hits(b *testing.B) {
 	b.Run("skipmap", func(b *testing.B) {
 		l := NewInt64()
 		for i := 0; i < initsize*rate; i++ {
-			if fastrandn(rate) == 0 {
+			if fastrand.Uint32n(rate) == 0 {
 				l.Store(int64(i), nil)
 			}
 		}
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(int64(fastrandn(initsize * rate)))
+				_, _ = l.Load(int64(fastrand.Uint32n(initsize * rate)))
 			}
 		})
 	})
 	b.Run("sync.Map", func(b *testing.B) {
 		var l sync.Map
 		for i := 0; i < initsize*rate; i++ {
-			if fastrandn(rate) == 0 {
+			if fastrand.Uint32n(rate) == 0 {
 				l.Store(int64(i), nil)
 			}
 		}
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(int64(fastrandn(initsize * rate)))
+				_, _ = l.Load(int64(fastrand.Uint32n(initsize * rate)))
 			}
 		})
 	})
@@ -104,7 +106,7 @@ func BenchmarkLoadNoHits(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(invalid[fastrandn(uint32(len(invalid)))])
+				_, _ = l.Load(invalid[fastrand.Uint32n(uint32(len(invalid)))])
 			}
 		})
 	})
@@ -121,7 +123,7 @@ func BenchmarkLoadNoHits(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(invalid[fastrandn(uint32(len(invalid)))])
+				_, _ = l.Load(invalid[fastrand.Uint32n(uint32(len(invalid)))])
 			}
 		})
 	})
@@ -133,11 +135,11 @@ func Benchmark50Store50Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(10)
+				u := fastrand.Uint32n(10)
 				if u < 5 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -147,11 +149,11 @@ func Benchmark50Store50Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(10)
+				u := fastrand.Uint32n(10)
 				if u < 5 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -164,11 +166,11 @@ func Benchmark30Store70Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(10)
+				u := fastrand.Uint32n(10)
 				if u < 3 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -178,11 +180,11 @@ func Benchmark30Store70Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(10)
+				u := fastrand.Uint32n(10)
 				if u < 3 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -198,13 +200,13 @@ func Benchmark1Delete9Store90Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(100)
+				u := fastrand.Uint32n(100)
 				if u < 9 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else if u == 10 {
-					l.Delete(int64(fastrandn(randN)))
+					l.Delete(int64(fastrand.Uint32n(randN)))
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -217,13 +219,13 @@ func Benchmark1Delete9Store90Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(100)
+				u := fastrand.Uint32n(100)
 				if u < 9 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else if u == 10 {
-					l.Delete(int64(fastrandn(randN)))
+					l.Delete(int64(fastrand.Uint32n(randN)))
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -239,17 +241,17 @@ func Benchmark1Range9Delete90Store900Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(1000)
+				u := fastrand.Uint32n(1000)
 				if u == 0 {
 					l.Range(func(key int64, value interface{}) bool {
 						return true
 					})
 				} else if u > 10 && u < 20 {
-					l.Delete(int64(fastrandn(randN)))
+					l.Delete(int64(fastrand.Uint32n(randN)))
 				} else if u >= 100 && u < 190 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -262,17 +264,17 @@ func Benchmark1Range9Delete90Store900Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(1000)
+				u := fastrand.Uint32n(1000)
 				if u == 0 {
 					l.Range(func(key, value interface{}) bool {
 						return true
 					})
 				} else if u > 10 && u < 20 {
-					l.Delete(int64(fastrandn(randN)))
+					l.Delete(int64(fastrand.Uint32n(randN)))
 				} else if u >= 100 && u < 190 {
-					l.Store(int64(fastrandn(randN)), nil)
+					l.Store(int64(fastrand.Uint32n(randN)), nil)
 				} else {
-					l.Load(int64(fastrandn(randN)))
+					l.Load(int64(fastrand.Uint32n(randN)))
 				}
 			}
 		})
@@ -285,7 +287,7 @@ func BenchmarkStringStore(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				l.Store(strconv.Itoa(int(fastrand())), nil)
+				l.Store(strconv.Itoa(int(fastrand.Uint32())), nil)
 			}
 		})
 	})
@@ -294,7 +296,7 @@ func BenchmarkStringStore(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				l.Store(strconv.Itoa(int(fastrand())), nil)
+				l.Store(strconv.Itoa(int(fastrand.Uint32())), nil)
 			}
 		})
 	})
@@ -305,28 +307,28 @@ func BenchmarkStringLoad50Hits(b *testing.B) {
 	b.Run("skipmap", func(b *testing.B) {
 		l := NewString()
 		for i := 0; i < initsize*rate; i++ {
-			if fastrandn(rate) == 0 {
+			if fastrand.Uint32n(rate) == 0 {
 				l.Store(strconv.Itoa(i), nil)
 			}
 		}
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(strconv.Itoa(int(fastrandn(initsize * rate))))
+				_, _ = l.Load(strconv.Itoa(int(fastrand.Uint32n(initsize * rate))))
 			}
 		})
 	})
 	b.Run("sync.Map", func(b *testing.B) {
 		var l sync.Map
 		for i := 0; i < initsize*rate; i++ {
-			if fastrandn(rate) == 0 {
+			if fastrand.Uint32n(rate) == 0 {
 				l.Store(strconv.Itoa(i), nil)
 			}
 		}
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, _ = l.Load(strconv.Itoa(int(fastrandn(initsize * rate))))
+				_, _ = l.Load(strconv.Itoa(int(fastrand.Uint32n(initsize * rate))))
 			}
 		})
 	})
@@ -338,11 +340,11 @@ func BenchmarkString30Store70Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(10)
+				u := fastrand.Uint32n(10)
 				if u < 3 {
-					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
+					l.Store(strconv.Itoa(int(fastrand.Uint32n(randN))), nil)
 				} else {
-					l.Load(strconv.Itoa(int(fastrandn(randN))))
+					l.Load(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				}
 			}
 		})
@@ -352,11 +354,11 @@ func BenchmarkString30Store70Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(10)
+				u := fastrand.Uint32n(10)
 				if u < 3 {
-					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
+					l.Store(strconv.Itoa(int(fastrand.Uint32n(randN))), nil)
 				} else {
-					l.Load(strconv.Itoa(int(fastrandn(randN))))
+					l.Load(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				}
 			}
 		})
@@ -372,13 +374,13 @@ func BenchmarkString1Delete9Store90Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(100)
+				u := fastrand.Uint32n(100)
 				if u < 9 {
-					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
+					l.Store(strconv.Itoa(int(fastrand.Uint32n(randN))), nil)
 				} else if u == 10 {
-					l.Delete(strconv.Itoa(int(fastrandn(randN))))
+					l.Delete(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				} else {
-					l.Load(strconv.Itoa(int(fastrandn(randN))))
+					l.Load(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				}
 			}
 		})
@@ -391,13 +393,13 @@ func BenchmarkString1Delete9Store90Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(100)
+				u := fastrand.Uint32n(100)
 				if u < 9 {
-					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
+					l.Store(strconv.Itoa(int(fastrand.Uint32n(randN))), nil)
 				} else if u == 10 {
-					l.Delete(strconv.Itoa(int(fastrandn(randN))))
+					l.Delete(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				} else {
-					l.Load(strconv.Itoa(int(fastrandn(randN))))
+					l.Load(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				}
 			}
 		})
@@ -413,17 +415,17 @@ func BenchmarkString1Range9Delete90Store900Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(1000)
+				u := fastrand.Uint32n(1000)
 				if u == 0 {
 					l.Range(func(key string, value interface{}) bool {
 						return true
 					})
 				} else if u > 10 && u < 20 {
-					l.Delete(strconv.Itoa(int(fastrandn(randN))))
+					l.Delete(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				} else if u >= 100 && u < 190 {
-					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
+					l.Store(strconv.Itoa(int(fastrand.Uint32n(randN))), nil)
 				} else {
-					l.Load(strconv.Itoa(int(fastrandn(randN))))
+					l.Load(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				}
 			}
 		})
@@ -436,17 +438,17 @@ func BenchmarkString1Range9Delete90Store900Load(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				u := fastrandn(1000)
+				u := fastrand.Uint32n(1000)
 				if u == 0 {
 					l.Range(func(key, value interface{}) bool {
 						return true
 					})
 				} else if u > 10 && u < 20 {
-					l.Delete(strconv.Itoa(int(fastrandn(randN))))
+					l.Delete(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				} else if u >= 100 && u < 190 {
-					l.Store(strconv.Itoa(int(fastrandn(randN))), nil)
+					l.Store(strconv.Itoa(int(fastrand.Uint32n(randN))), nil)
 				} else {
-					l.Load(strconv.Itoa(int(fastrandn(randN))))
+					l.Load(strconv.Itoa(int(fastrand.Uint32n(randN))))
 				}
 			}
 		})

@@ -267,7 +267,7 @@ func (s *Float32Map) LoadOrStore(key float32, value interface{}) (actual interfa
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -623,7 +623,7 @@ func (s *Float64Map) LoadOrStore(key float64, value interface{}) (actual interfa
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -979,7 +979,7 @@ func (s *Int32Map) LoadOrStore(key int32, value interface{}) (actual interface{}
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -1335,7 +1335,7 @@ func (s *Int16Map) LoadOrStore(key int16, value interface{}) (actual interface{}
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -1691,7 +1691,7 @@ func (s *IntMap) LoadOrStore(key int, value interface{}) (actual interface{}, lo
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -2047,7 +2047,7 @@ func (s *Uint64Map) LoadOrStore(key uint64, value interface{}) (actual interface
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -2403,7 +2403,7 @@ func (s *Uint32Map) LoadOrStore(key uint32, value interface{}) (actual interface
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -2759,7 +2759,7 @@ func (s *Uint16Map) LoadOrStore(key uint16, value interface{}) (actual interface
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -3115,7 +3115,7 @@ func (s *UintMap) LoadOrStore(key uint, value interface{}) (actual interface{}, 
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -3471,7 +3471,7 @@ func (s *Float32MapDesc) LoadOrStore(key float32, value interface{}) (actual int
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -3827,7 +3827,7 @@ func (s *Float64MapDesc) LoadOrStore(key float64, value interface{}) (actual int
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -4183,7 +4183,7 @@ func (s *Int32MapDesc) LoadOrStore(key int32, value interface{}) (actual interfa
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -4539,7 +4539,7 @@ func (s *Int16MapDesc) LoadOrStore(key int16, value interface{}) (actual interfa
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -4895,7 +4895,7 @@ func (s *IntMapDesc) LoadOrStore(key int, value interface{}) (actual interface{}
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -5251,7 +5251,7 @@ func (s *Uint64MapDesc) LoadOrStore(key uint64, value interface{}) (actual inter
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -5607,7 +5607,7 @@ func (s *Uint32MapDesc) LoadOrStore(key uint32, value interface{}) (actual inter
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -5963,7 +5963,7 @@ func (s *Uint16MapDesc) LoadOrStore(key uint16, value interface{}) (actual inter
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -6319,7 +6319,7 @@ func (s *UintMapDesc) LoadOrStore(key uint, value interface{}) (actual interface
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }
@@ -6675,7 +6675,7 @@ func (s *Int64MapDesc) LoadOrStore(key int64, value interface{}) (actual interfa
 	loadedval, ok := s.Load(key)
 	if !ok {
 		s.Store(key, value)
-		return nil, false
+		return value, false
 	}
 	return loadedval, true
 }

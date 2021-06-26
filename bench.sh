@@ -1,1 +1,1 @@
-go test -run=NOTEST -bench=. -count=10 -timeout=60m -benchtime=100000x -benchmem > x.txt && benchstat x.txt
+go run types_gen.go && go test -run=NOTEST -bench=. -cpu=1,2,4,8,16 -count=20 -timeout=60m -benchtime=100000x

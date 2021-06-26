@@ -11,8 +11,9 @@ import (
 
 // Int64Map represents a map based on skip list in ascending order.
 type Int64Map struct {
-	header *int64Node
-	length int64
+	header       *int64Node
+	length       int64
+	highestLevel int64 // highest level for now
 }
 
 type int64Node struct {
@@ -63,7 +64,8 @@ func NewInt64() *Int64Map {
 	h := newInt64Node(0, "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
 	return &Int64Map{
-		header: h,
+		header:       h,
+		highestLevel: defaultHighestLevel,
 	}
 }
 
@@ -72,7 +74,7 @@ func NewInt64() *Int64Map {
 // (without fullpath, if find the node will return immediately)
 func (s *Int64Map) findNode(key int64, preds *[maxLevel]*int64Node, succs *[maxLevel]*int64Node) *int64Node {
 	x := s.header
-	for i := maxLevel - 1; i >= 0; i-- {
+	for i := int(atomic.LoadInt64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
 		for succ != nil && succ.lessthan(key) {
 			x = succ
@@ -94,7 +96,7 @@ func (s *Int64Map) findNode(key int64, preds *[maxLevel]*int64Node, succs *[maxL
 func (s *Int64Map) findNodeDelete(key int64, preds *[maxLevel]*int64Node, succs *[maxLevel]*int64Node) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
-	for i := maxLevel - 1; i >= 0; i-- {
+	for i := int(atomic.LoadInt64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
 		for succ != nil && succ.lessthan(key) {
 			x = succ
@@ -123,7 +125,7 @@ func unlockInt64(preds [maxLevel]*int64Node, highestLevel int) {
 
 // Store sets the value for a key.
 func (s *Int64Map) Store(key int64, value interface{}) {
-	level := randomLevel()
+	level := s.randomlevel()
 	var preds, succs [maxLevel]*int64Node
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
@@ -175,12 +177,28 @@ func (s *Int64Map) Store(key int64, value interface{}) {
 	}
 }
 
+func (s *Int64Map) randomlevel() int {
+	// Generate random level.
+	level := randomLevel()
+	// Update highest level if possible.
+	for {
+		hl := atomic.LoadInt64(&s.highestLevel)
+		if int64(level) <= hl {
+			break
+		}
+		if atomic.CompareAndSwapInt64(&s.highestLevel, hl, int64(level)) {
+			break
+		}
+	}
+	return level
+}
+
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
 // The ok result indicates whether value was found in the map.
 func (s *Int64Map) Load(key int64) (value interface{}, ok bool) {
 	x := s.header
-	for i := maxLevel - 1; i >= 0; i-- {
+	for i := int(atomic.LoadInt64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
 		for nex != nil && nex.lessthan(key) {
 			x = nex

@@ -293,7 +293,7 @@ func (s *Int64Map) LoadOrStore(key int64, value interface{}) (actual interface{}
 }
 
 // Delete deletes the value for a key.
-func (s *Int64Map) Delete(key int64) {
+func (s *Int64Map) Delete(key int64) bool {
 	var (
 		nodeToDelete *int64Node
 		isMarked     bool // represents if this operation mark the node
@@ -312,7 +312,7 @@ func (s *Int64Map) Delete(key int64) {
 					// The node is marked by another process,
 					// the physical deletion will be accomplished by another process.
 					nodeToDelete.mu.Unlock()
-					return // false
+					return false
 				}
 				nodeToDelete.flags.SetTrue(marked)
 				isMarked = true
@@ -349,9 +349,9 @@ func (s *Int64Map) Delete(key int64) {
 			nodeToDelete.mu.Unlock()
 			unlockInt64(preds, highestLocked)
 			atomic.AddInt64(&s.length, -1)
-			return // true
+			return true
 		}
-		return // false
+		return false
 	}
 }
 

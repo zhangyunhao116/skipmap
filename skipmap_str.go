@@ -185,6 +185,7 @@ func (s *StringMap) Store(key string, value interface{}) {
 		atomic.AddInt64(&s.length, 1)
 	}
 }
+
 func (s *StringMap) randomlevel() int {
 	// Generate random level.
 	level := randomLevel()
@@ -302,7 +303,7 @@ func (s *StringMap) LoadOrStore(key string, value interface{}) (actual interface
 }
 
 // Delete deletes the value for a key.
-func (s *StringMap) Delete(key string) {
+func (s *StringMap) Delete(key string) bool {
 	var (
 		nodeToDelete *stringNode
 		isMarked     bool // represents if this operation mark the node
@@ -321,7 +322,7 @@ func (s *StringMap) Delete(key string) {
 					// The node is marked by another process,
 					// the physical deletion will be accomplished by another process.
 					nodeToDelete.mu.Unlock()
-					return // false
+					return false
 				}
 				nodeToDelete.flags.SetTrue(marked)
 				isMarked = true
@@ -358,9 +359,9 @@ func (s *StringMap) Delete(key string) {
 			nodeToDelete.mu.Unlock()
 			unlockString(preds, highestLocked)
 			atomic.AddInt64(&s.length, -1)
-			return // true
+			return true
 		}
-		return // false
+		return false
 	}
 }
 

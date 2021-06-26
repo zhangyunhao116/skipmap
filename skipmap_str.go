@@ -14,8 +14,9 @@ func hash(s string) uint64 {
 
 // StringMap represents a map based on skip list in ascending order.
 type StringMap struct {
-	header *stringNode
-	length int64
+	header       *stringNode
+	length       int64
+	highestLevel int64 // highest level for now
 }
 
 type stringNode struct {
@@ -70,7 +71,8 @@ func NewString() *StringMap {
 	h := newStringNode("", "", maxLevel)
 	h.flags.SetTrue(fullyLinked)
 	return &StringMap{
-		header: h,
+		header:       h,
+		highestLevel: defaultHighestLevel,
 	}
 }
 
@@ -80,7 +82,7 @@ func NewString() *StringMap {
 func (s *StringMap) findNode(key string, preds *[maxLevel]*stringNode, succs *[maxLevel]*stringNode) *stringNode {
 	score := hash(key)
 	x := s.header
-	for i := maxLevel - 1; i >= 0; i-- {
+	for i := int(atomic.LoadInt64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
 		for succ != nil && succ.cmp(score, key) < 0 {
 			x = succ
@@ -103,7 +105,7 @@ func (s *StringMap) findNodeDelete(key string, preds *[maxLevel]*stringNode, suc
 	// lFound represents the index of the first layer at which it found a node.
 	score := hash(key)
 	lFound, x := -1, s.header
-	for i := maxLevel - 1; i >= 0; i-- {
+	for i := int(atomic.LoadInt64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.loadNext(i)
 		for succ != nil && succ.cmp(score, key) < 0 {
 			x = succ
@@ -132,7 +134,7 @@ func unlockString(preds [maxLevel]*stringNode, highestLevel int) {
 
 // Store sets the value for a key.
 func (s *StringMap) Store(key string, value interface{}) {
-	level := randomLevel()
+	level := s.randomlevel()
 	var preds, succs [maxLevel]*stringNode
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
@@ -140,7 +142,6 @@ func (s *StringMap) Store(key string, value interface{}) {
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
 				// just replace the value.
-				// fmt.Printf("%v\n", nodeFound.loadVal())
 				nodeFound.storeVal(value)
 				return
 			}
@@ -184,6 +185,21 @@ func (s *StringMap) Store(key string, value interface{}) {
 		atomic.AddInt64(&s.length, 1)
 	}
 }
+func (s *StringMap) randomlevel() int {
+	// Generate random level.
+	level := randomLevel()
+	// Update highest level if possible.
+	for {
+		hl := atomic.LoadInt64(&s.highestLevel)
+		if int64(level) <= hl {
+			break
+		}
+		if atomic.CompareAndSwapInt64(&s.highestLevel, hl, int64(level)) {
+			break
+		}
+	}
+	return level
+}
 
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
@@ -191,7 +207,7 @@ func (s *StringMap) Store(key string, value interface{}) {
 func (s *StringMap) Load(key string) (value interface{}, ok bool) {
 	score := hash(key)
 	x := s.header
-	for i := maxLevel - 1; i >= 0; i-- {
+	for i := int(atomic.LoadInt64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.loadNext(i)
 		for nex != nil && nex.cmp(score, key) < 0 {
 			x = nex

@@ -190,7 +190,7 @@ func TestSkipMap(t *testing.T) {
 		t.Fatal("only one LoadOrStore can successfully insert a key and value")
 	}
 	if tmpmap.Len() != 1 {
-		t.Fatal("only one value can returned from LoadOrStore")
+		t.Fatal("only one value can be returned from LoadOrStore")
 	}
 	// Correntness 4. (LoadAndDelete)
 	// Only one LoadAndDelete can successfully get a value.

@@ -16,8 +16,8 @@ type Float32Map struct {
 
 type float32Node struct {
 	key   float32
-	value unsafe.Pointer
-	next  optionalArray // [level]*float32Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*float32Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -58,6 +58,7 @@ func (n *float32Node) atomicLoadNext(i int) *float32Node {
 func (n *float32Node) atomicStoreNext(i int, node *float32Node) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *float32Node) lessthan(key float32) bool {
 	return n.key < key
 }
@@ -441,8 +442,8 @@ type Float32MapDesc struct {
 
 type float32NodeDesc struct {
 	key   float32
-	value unsafe.Pointer
-	next  optionalArray // [level]*float32NodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*float32NodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -483,6 +484,7 @@ func (n *float32NodeDesc) atomicLoadNext(i int) *float32NodeDesc {
 func (n *float32NodeDesc) atomicStoreNext(i int, node *float32NodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *float32NodeDesc) lessthan(key float32) bool {
 	return n.key > key
 }
@@ -866,8 +868,8 @@ type Float64Map struct {
 
 type float64Node struct {
 	key   float64
-	value unsafe.Pointer
-	next  optionalArray // [level]*float64Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*float64Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -908,6 +910,7 @@ func (n *float64Node) atomicLoadNext(i int) *float64Node {
 func (n *float64Node) atomicStoreNext(i int, node *float64Node) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *float64Node) lessthan(key float64) bool {
 	return n.key < key
 }
@@ -1291,8 +1294,8 @@ type Float64MapDesc struct {
 
 type float64NodeDesc struct {
 	key   float64
-	value unsafe.Pointer
-	next  optionalArray // [level]*float64NodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*float64NodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -1333,6 +1336,7 @@ func (n *float64NodeDesc) atomicLoadNext(i int) *float64NodeDesc {
 func (n *float64NodeDesc) atomicStoreNext(i int, node *float64NodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *float64NodeDesc) lessthan(key float64) bool {
 	return n.key > key
 }
@@ -1716,8 +1720,8 @@ type Int32Map struct {
 
 type int32Node struct {
 	key   int32
-	value unsafe.Pointer
-	next  optionalArray // [level]*int32Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*int32Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -1758,6 +1762,7 @@ func (n *int32Node) atomicLoadNext(i int) *int32Node {
 func (n *int32Node) atomicStoreNext(i int, node *int32Node) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *int32Node) lessthan(key int32) bool {
 	return n.key < key
 }
@@ -2141,8 +2146,8 @@ type Int32MapDesc struct {
 
 type int32NodeDesc struct {
 	key   int32
-	value unsafe.Pointer
-	next  optionalArray // [level]*int32NodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*int32NodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -2183,6 +2188,7 @@ func (n *int32NodeDesc) atomicLoadNext(i int) *int32NodeDesc {
 func (n *int32NodeDesc) atomicStoreNext(i int, node *int32NodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *int32NodeDesc) lessthan(key int32) bool {
 	return n.key > key
 }
@@ -2566,8 +2572,8 @@ type Int16Map struct {
 
 type int16Node struct {
 	key   int16
-	value unsafe.Pointer
-	next  optionalArray // [level]*int16Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*int16Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -2608,6 +2614,7 @@ func (n *int16Node) atomicLoadNext(i int) *int16Node {
 func (n *int16Node) atomicStoreNext(i int, node *int16Node) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *int16Node) lessthan(key int16) bool {
 	return n.key < key
 }
@@ -2991,8 +2998,8 @@ type Int16MapDesc struct {
 
 type int16NodeDesc struct {
 	key   int16
-	value unsafe.Pointer
-	next  optionalArray // [level]*int16NodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*int16NodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -3033,6 +3040,7 @@ func (n *int16NodeDesc) atomicLoadNext(i int) *int16NodeDesc {
 func (n *int16NodeDesc) atomicStoreNext(i int, node *int16NodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *int16NodeDesc) lessthan(key int16) bool {
 	return n.key > key
 }
@@ -3416,8 +3424,8 @@ type IntMap struct {
 
 type intNode struct {
 	key   int
-	value unsafe.Pointer
-	next  optionalArray // [level]*intNode
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*intNode
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -3458,6 +3466,7 @@ func (n *intNode) atomicLoadNext(i int) *intNode {
 func (n *intNode) atomicStoreNext(i int, node *intNode) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *intNode) lessthan(key int) bool {
 	return n.key < key
 }
@@ -3841,8 +3850,8 @@ type IntMapDesc struct {
 
 type intNodeDesc struct {
 	key   int
-	value unsafe.Pointer
-	next  optionalArray // [level]*intNodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*intNodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -3883,6 +3892,7 @@ func (n *intNodeDesc) atomicLoadNext(i int) *intNodeDesc {
 func (n *intNodeDesc) atomicStoreNext(i int, node *intNodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *intNodeDesc) lessthan(key int) bool {
 	return n.key > key
 }
@@ -4266,8 +4276,8 @@ type Uint64Map struct {
 
 type uint64Node struct {
 	key   uint64
-	value unsafe.Pointer
-	next  optionalArray // [level]*uint64Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uint64Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -4308,6 +4318,7 @@ func (n *uint64Node) atomicLoadNext(i int) *uint64Node {
 func (n *uint64Node) atomicStoreNext(i int, node *uint64Node) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uint64Node) lessthan(key uint64) bool {
 	return n.key < key
 }
@@ -4691,8 +4702,8 @@ type Uint64MapDesc struct {
 
 type uint64NodeDesc struct {
 	key   uint64
-	value unsafe.Pointer
-	next  optionalArray // [level]*uint64NodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uint64NodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -4733,6 +4744,7 @@ func (n *uint64NodeDesc) atomicLoadNext(i int) *uint64NodeDesc {
 func (n *uint64NodeDesc) atomicStoreNext(i int, node *uint64NodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uint64NodeDesc) lessthan(key uint64) bool {
 	return n.key > key
 }
@@ -5116,8 +5128,8 @@ type Uint32Map struct {
 
 type uint32Node struct {
 	key   uint32
-	value unsafe.Pointer
-	next  optionalArray // [level]*uint32Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uint32Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -5158,6 +5170,7 @@ func (n *uint32Node) atomicLoadNext(i int) *uint32Node {
 func (n *uint32Node) atomicStoreNext(i int, node *uint32Node) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uint32Node) lessthan(key uint32) bool {
 	return n.key < key
 }
@@ -5541,8 +5554,8 @@ type Uint32MapDesc struct {
 
 type uint32NodeDesc struct {
 	key   uint32
-	value unsafe.Pointer
-	next  optionalArray // [level]*uint32NodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uint32NodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -5583,6 +5596,7 @@ func (n *uint32NodeDesc) atomicLoadNext(i int) *uint32NodeDesc {
 func (n *uint32NodeDesc) atomicStoreNext(i int, node *uint32NodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uint32NodeDesc) lessthan(key uint32) bool {
 	return n.key > key
 }
@@ -5966,8 +5980,8 @@ type Uint16Map struct {
 
 type uint16Node struct {
 	key   uint16
-	value unsafe.Pointer
-	next  optionalArray // [level]*uint16Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uint16Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -6008,6 +6022,7 @@ func (n *uint16Node) atomicLoadNext(i int) *uint16Node {
 func (n *uint16Node) atomicStoreNext(i int, node *uint16Node) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uint16Node) lessthan(key uint16) bool {
 	return n.key < key
 }
@@ -6391,8 +6406,8 @@ type Uint16MapDesc struct {
 
 type uint16NodeDesc struct {
 	key   uint16
-	value unsafe.Pointer
-	next  optionalArray // [level]*uint16NodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uint16NodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -6433,6 +6448,7 @@ func (n *uint16NodeDesc) atomicLoadNext(i int) *uint16NodeDesc {
 func (n *uint16NodeDesc) atomicStoreNext(i int, node *uint16NodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uint16NodeDesc) lessthan(key uint16) bool {
 	return n.key > key
 }
@@ -6816,8 +6832,8 @@ type UintMap struct {
 
 type uintNode struct {
 	key   uint
-	value unsafe.Pointer
-	next  optionalArray // [level]*uintNode
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uintNode
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -6858,6 +6874,7 @@ func (n *uintNode) atomicLoadNext(i int) *uintNode {
 func (n *uintNode) atomicStoreNext(i int, node *uintNode) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uintNode) lessthan(key uint) bool {
 	return n.key < key
 }
@@ -7241,8 +7258,8 @@ type UintMapDesc struct {
 
 type uintNodeDesc struct {
 	key   uint
-	value unsafe.Pointer
-	next  optionalArray // [level]*uintNodeDesc
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*uintNodeDesc
 	mu    sync.Mutex
 	flags bitflag
 	level uint32
@@ -7283,6 +7300,7 @@ func (n *uintNodeDesc) atomicLoadNext(i int) *uintNodeDesc {
 func (n *uintNodeDesc) atomicStoreNext(i int, node *uintNodeDesc) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
+
 func (n *uintNodeDesc) lessthan(key uint) bool {
 	return n.key > key
 }
@@ -7667,8 +7685,8 @@ type StringMap struct {
 type stringNode struct {
 	key   string
 	score uint64
-	value unsafe.Pointer
-	next  optionalArray // [level]*stringNode
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*stringNode
 	mu    sync.Mutex
 	flags bitflag
 	level uint32

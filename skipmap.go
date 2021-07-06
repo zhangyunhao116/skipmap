@@ -18,8 +18,8 @@ type Int64Map struct {
 
 type int64Node struct {
 	key   int64
-	value unsafe.Pointer
-	next  optionalArray // [level]*int64Node
+	value unsafe.Pointer // *interface{}
+	next  optionalArray  // [level]*int64Node
 	mu    sync.Mutex
 	flags bitflag
 	level uint32

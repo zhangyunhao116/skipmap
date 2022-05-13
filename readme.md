@@ -4,7 +4,7 @@
 
 ## Introduction
 
-> From v0.8.0, the skipset requires Go version >= 1.18, if your Go version is lower, use v0.7.0 instead.
+> From v0.8.0, the skipmap requires Go version >= 1.18, if your Go version is lower, use v0.7.0 instead.
 
 skipmap is a high-performance, scalable, concurrent-safe map based on skip-list. In the typical pattern(100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipmap up to 10x faster than the built-in sync.Map.
 

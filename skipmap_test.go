@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"reflect"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,8 +12,37 @@ import (
 	"github.com/zhangyunhao116/fastrand"
 )
 
-func TestSkipMap(t *testing.T) {
-	m := NewInt()
+func TestTyped(t *testing.T) {
+	testSkipMapInt(t, func() anyskipmap[int] { return NewInt() })
+	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewIntDesc() })
+	testSkipMapString(t, func() anyskipmap[string] { return NewString() })
+	testSyncMapSuiteInt64(t, func() anyskipmap[int64] { return NewInt64() })
+}
+
+func TestOrdered(t *testing.T) {
+	testSkipMapInt(t, func() anyskipmap[int] { return New[int]() })
+	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewDesc[int]() })
+	testSkipMapString(t, func() anyskipmap[string] { return New[string]() })
+	testSyncMapSuiteInt64(t, func() anyskipmap[int64] { return New[int64]() })
+}
+
+func TestFunc(t *testing.T) {
+	testSkipMapInt(t, func() anyskipmap[int] { return NewFunc(func(a, b int) bool { return a < b }) })
+}
+
+type anyskipmap[T any] interface {
+	Store(key T, value any)
+	Load(key T) (any, bool)
+	Delete(key T) bool
+	LoadAndDelete(key T) (any, bool)
+	LoadOrStore(key T, value any) (any, bool)
+	LoadOrStoreLazy(key T, f func() any) (any, bool)
+	Range(f func(key T, value any) bool)
+	Len() int
+}
+
+func testSkipMapInt(t *testing.T, newset func() anyskipmap[int]) {
+	m := newset()
 
 	// Correctness.
 	m.Store(123, "123")
@@ -126,12 +156,12 @@ func TestSkipMap(t *testing.T) {
 	}
 	// Correctness 2.
 	var m1 sync.Map
-	m2 := NewUint32()
+	m2 := newset()
 	var v1, v2 interface{}
 	var ok1, ok2 bool
 	for i := 0; i < 100000; i++ {
-		rd := fastrand.Uint32n(10)
-		r1, r2 := fastrand.Uint32n(100), fastrand.Uint32n(100)
+		rd := int(fastrand.Uint32n(10))
+		r1, r2 := int(fastrand.Uint32n(100)), int(fastrand.Uint32n(100))
 		if rd == 0 {
 			m1.Store(r1, r2)
 			m2.Store(r1, r2)
@@ -151,7 +181,7 @@ func TestSkipMap(t *testing.T) {
 			m1.Delete(r1)
 			m2.Delete(r1)
 		} else if rd == 4 {
-			m2.Range(func(key uint32, value interface{}) bool {
+			m2.Range(func(key int, value interface{}) bool {
 				v, ok := m1.Load(key)
 				if !ok || v != value {
 					t.Fatal(v, ok, key, value)
@@ -169,8 +199,8 @@ func TestSkipMap(t *testing.T) {
 	// Correntness 3. (LoadOrStore)
 	// Only one LoadorStore can successfully insert its key and value.
 	// And the returned value is unique.
-	mp := NewInt()
-	tmpmap := NewInt64()
+	mp := newset()
+	tmpmap := newset()
 	samekey := 123
 	var added int64
 	for i := 1; i < 1000; i++ {
@@ -181,7 +211,7 @@ func TestSkipMap(t *testing.T) {
 			if !loaded {
 				atomic.AddInt64(&added, 1)
 			}
-			tmpmap.Store(actual.(int64), nil)
+			tmpmap.Store(int(actual.(int64)), nil)
 			wg.Done()
 		}()
 	}
@@ -194,8 +224,8 @@ func TestSkipMap(t *testing.T) {
 	}
 	// Correntness 4. (LoadAndDelete)
 	// Only one LoadAndDelete can successfully get a value.
-	mp = NewInt()
-	tmpmap = NewInt64()
+	mp = newset()
+	tmpmap = newset()
 	samekey = 123
 	added = 0 // int64
 	mp.Store(samekey, 555)
@@ -218,8 +248,8 @@ func TestSkipMap(t *testing.T) {
 	}
 
 	// Correntness 5. (LoadOrStoreLazy)
-	mp = NewInt()
-	tmpmap = NewInt64()
+	mp = newset()
+	tmpmap = newset()
 	samekey = 123
 	added = 0
 	var fcalled int64
@@ -234,7 +264,7 @@ func TestSkipMap(t *testing.T) {
 			if !loaded {
 				atomic.AddInt64(&added, 1)
 			}
-			tmpmap.Store(actual.(int64), nil)
+			tmpmap.Store(int(actual.(int64)), nil)
 			wg.Done()
 		}()
 	}
@@ -247,8 +277,8 @@ func TestSkipMap(t *testing.T) {
 	}
 }
 
-func TestSkipMapDesc(t *testing.T) {
-	m := NewIntDesc()
+func testSkipMapIntDesc(t *testing.T, newset func() anyskipmap[int]) {
+	m := newset()
 	cases := []int{10, 11, 12}
 	for _, v := range cases {
 		m.Store(v, nil)
@@ -263,11 +293,117 @@ func TestSkipMapDesc(t *testing.T) {
 	})
 }
 
+func testSkipMapString(t *testing.T, newset func() anyskipmap[string]) {
+	m := newset()
+
+	// Correctness.
+	m.Store("123", "123")
+	v, ok := m.Load("123")
+	if !ok || v != "123" || m.Len() != 1 {
+		t.Fatal("invalid")
+	}
+
+	m.Store("123", "456")
+	v, ok = m.Load("123")
+	if !ok || v != "456" || m.Len() != 1 {
+		t.Fatal("invalid")
+	}
+
+	m.Store("123", 456)
+	v, ok = m.Load("123")
+	if !ok || v != 456 || m.Len() != 1 {
+		t.Fatal("invalid")
+	}
+
+	m.Delete("123")
+	_, ok = m.Load("123")
+	if ok || m.Len() != 0 {
+		t.Fatal("invalid")
+	}
+
+	_, ok = m.LoadOrStore("123", 456)
+	if ok || m.Len() != 1 {
+		t.Fatal("invalid")
+	}
+
+	v, ok = m.Load("123")
+	if !ok || v != 456 || m.Len() != 1 {
+		t.Fatal("invalid")
+	}
+
+	v, ok = m.LoadAndDelete("123")
+	if !ok || v != 456 || m.Len() != 0 {
+		t.Fatal("invalid")
+	}
+
+	_, ok = m.LoadOrStore("123", 456)
+	if ok || m.Len() != 1 {
+		t.Fatal("invalid")
+	}
+
+	m.LoadOrStore("456", 123)
+	if ok || m.Len() != 2 {
+		t.Fatal("invalid")
+	}
+
+	m.Range(func(key string, value interface{}) bool {
+		if key == "123" {
+			m.Store("123", 123)
+		} else if key == "456" {
+			m.LoadAndDelete("456")
+		}
+		return true
+	})
+
+	v, ok = m.Load("123")
+	if !ok || v != 123 || m.Len() != 1 {
+		t.Fatal("invalid")
+	}
+
+	// Concurrent.
+	var wg sync.WaitGroup
+	for i := 0; i < 1000; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			n := strconv.Itoa(i)
+			m.Store(n, int(i+1000))
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	var count2 int64
+	m.Range(func(key string, value interface{}) bool {
+		atomic.AddInt64(&count2, 1)
+		return true
+	})
+	m.Delete("600")
+	var count int64
+	m.Range(func(key string, value interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	val, ok := m.Load("500")
+	if !ok || reflect.TypeOf(val).Kind().String() != "int" || val.(int) != 1500 {
+		t.Fatal("fail")
+	}
+
+	_, ok = m.Load("600")
+	if ok {
+		t.Fatal("fail")
+	}
+
+	if m.Len() != 999 || int(count) != m.Len() {
+		t.Fatal("fail", m.Len(), count, count2)
+	}
+}
+
 /* Test from sync.Map */
-func TestConcurrentRange(t *testing.T) {
+func testSyncMapSuiteInt64(t *testing.T, newset func() anyskipmap[int64]) {
 	const mapSize = 1 << 10
 
-	m := NewInt64()
+	m := newset()
 	for n := int64(1); n <= mapSize; n++ {
 		m.Store(n, int64(n))
 	}

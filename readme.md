@@ -4,6 +4,8 @@
 
 ## Introduction
 
+> From v0.8.0, the skipmap requires Go version >= 1.18, if your Go version is lower, use v0.7.0 instead.
+
 skipmap is a high-performance, scalable, concurrent-safe map based on skip-list. In the typical pattern(100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipmap up to 10x faster than the built-in sync.Map.
 
 The main idea behind the skipmap is [A Simple Optimistic Skiplist Algorithm](<https://people.csail.mit.edu/shanir/publications/LazySkipList.pdf>).
@@ -65,9 +67,46 @@ func main() {
 
 ```
 
+From `v0.8.0`, you can use generic version APIs.
 
+**Note that generic APIs are always slower than typed APIs, but are more suitable for some scenarios such as functional programming.**
+
+> e.g. `New[int]` is \~2x slower than `NewInt`, and `NewFunc(func(a, b int) bool { return a < b })` is 1\~2x slower than `New[int]`.
+>
+> Performance ranking: NewInt > New[Int] > NewFunc(func(a, b int) bool { return a < b })
+
+```go
+package main
+
+import (
+	"github.com/zhangyunhao116/skipmap"
+)
+
+func main() {
+	m1 := skipmap.New[int]()
+	for _, v := range []int{10, 12, 15} {
+		m1.Store(v, v+100)
+	}
+	m1.Range(func(key int, value interface{}) bool {
+		println("m1 found ", key, value)
+		return true
+	})
+
+	m2 := skipmap.NewFunc(func(a, b int) bool { return a < b })
+	for _, v := range []int{10, 12, 15} {
+		m2.Store(v, v+200)
+	}
+	m2.Range(func(key int, value interface{}) bool {
+		println("m2 found ", key, value)
+		return true
+	})
+}
+
+```
 
 ## Benchmark
+
+> based on typed APIs.
 
 Go version: go1.16.2 linux/amd64
 

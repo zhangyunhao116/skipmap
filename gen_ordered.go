@@ -9,23 +9,23 @@ import (
 )
 
 // OrderedMap represents a map based on skip list.
-type OrderedMap[T ordered] struct {
+type OrderedMap[keyT ordered, valueT any] struct {
 	length       int64
 	highestLevel uint64 // highest level for now
-	header       *orderednode[T]
+	header       *orderednode[keyT, valueT]
 }
 
-type orderednode[T ordered] struct {
+type orderednode[keyT ordered, valueT any] struct {
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   T
+	key   keyT
 	next  optionalArray // [level]*orderednode
 	mu    sync.Mutex
 	level uint32
 }
 
-func newOrderedNode[T ordered](key T, value any, level int) *orderednode[T] {
-	node := &orderednode[T]{
+func newOrderedNode[keyT ordered, valueT any](key keyT, value valueT, level int) *orderednode[keyT, valueT] {
+	node := &orderednode[keyT, valueT]{
 		key:   key,
 		level: uint32(level),
 	}
@@ -36,34 +36,34 @@ func newOrderedNode[T ordered](key T, value any, level int) *orderednode[T] {
 	return node
 }
 
-func (n *orderednode[T]) storeVal(value any) {
+func (n *orderednode[keyT, valueT]) storeVal(value valueT) {
 	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
-func (n *orderednode[T]) loadVal() any {
-	return *(*any)(atomic.LoadPointer(&n.value))
+func (n *orderednode[keyT, valueT]) loadVal() valueT {
+	return *(*valueT)(atomic.LoadPointer(&n.value))
 }
 
-func (n *orderednode[T]) loadNext(i int) *orderednode[T] {
-	return (*orderednode[T])(n.next.load(i))
+func (n *orderednode[keyT, valueT]) loadNext(i int) *orderednode[keyT, valueT] {
+	return (*orderednode[keyT, valueT])(n.next.load(i))
 }
 
-func (n *orderednode[T]) storeNext(i int, node *orderednode[T]) {
+func (n *orderednode[keyT, valueT]) storeNext(i int, node *orderednode[keyT, valueT]) {
 	n.next.store(i, unsafe.Pointer(node))
 }
 
-func (n *orderednode[T]) atomicLoadNext(i int) *orderednode[T] {
-	return (*orderednode[T])(n.next.atomicLoad(i))
+func (n *orderednode[keyT, valueT]) atomicLoadNext(i int) *orderednode[keyT, valueT] {
+	return (*orderednode[keyT, valueT])(n.next.atomicLoad(i))
 }
 
-func (n *orderednode[T]) atomicStoreNext(i int, node *orderednode[T]) {
+func (n *orderednode[keyT, valueT]) atomicStoreNext(i int, node *orderednode[keyT, valueT]) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
 // The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *OrderedMap[T]) findNode(key T, preds *[maxLevel]*orderednode[T], succs *[maxLevel]*orderednode[T]) *orderednode[T] {
+func (s *OrderedMap[keyT, valueT]) findNode(key keyT, preds *[maxLevel]*orderednode[keyT, valueT], succs *[maxLevel]*orderednode[keyT, valueT]) *orderednode[keyT, valueT] {
 	x := s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
@@ -84,7 +84,7 @@ func (s *OrderedMap[T]) findNode(key T, preds *[maxLevel]*orderednode[T], succs 
 
 // findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
 // The returned preds and succs always satisfy preds[i] > key >= succs[i].
-func (s *OrderedMap[T]) findNodeDelete(key T, preds *[maxLevel]*orderednode[T], succs *[maxLevel]*orderednode[T]) int {
+func (s *OrderedMap[keyT, valueT]) findNodeDelete(key keyT, preds *[maxLevel]*orderednode[keyT, valueT], succs *[maxLevel]*orderednode[keyT, valueT]) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
@@ -104,8 +104,8 @@ func (s *OrderedMap[T]) findNodeDelete(key T, preds *[maxLevel]*orderednode[T], 
 	return lFound
 }
 
-func unlockordered[T ordered](preds [maxLevel]*orderednode[T], highestLevel int) {
-	var prevPred *orderednode[T]
+func unlockordered[keyT ordered, valueT any](preds [maxLevel]*orderednode[keyT, valueT], highestLevel int) {
+	var prevPred *orderednode[keyT, valueT]
 	for i := highestLevel; i >= 0; i-- {
 		if preds[i] != prevPred { // the node could be unlocked by previous loop
 			preds[i].mu.Unlock()
@@ -115,9 +115,9 @@ func unlockordered[T ordered](preds [maxLevel]*orderednode[T], highestLevel int)
 }
 
 // Store sets the value for a key.
-func (s *OrderedMap[T]) Store(key T, value any) {
+func (s *OrderedMap[keyT, valueT]) Store(key keyT, value valueT) {
 	level := s.randomlevel()
-	var preds, succs [maxLevel]*orderednode[T]
+	var preds, succs [maxLevel]*orderednode[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -136,7 +136,7 @@ func (s *OrderedMap[T]) Store(key T, value any) {
 		var (
 			highestLocked        = -1 // the highest level being locked by this process
 			valid                = true
-			pred, succ, prevPred *orderednode[T]
+			pred, succ, prevPred *orderednode[keyT, valueT]
 		)
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
@@ -168,7 +168,7 @@ func (s *OrderedMap[T]) Store(key T, value any) {
 	}
 }
 
-func (s *OrderedMap[T]) randomlevel() int {
+func (s *OrderedMap[keyT, valueT]) randomlevel() int {
 	// Generate random level.
 	level := randomLevel()
 	// Update highest level if possible.
@@ -187,7 +187,7 @@ func (s *OrderedMap[T]) randomlevel() int {
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
 // The ok result indicates whether value was found in the map.
-func (s *OrderedMap[T]) Load(key T) (value any, ok bool) {
+func (s *OrderedMap[keyT, valueT]) Load(key keyT) (value valueT, ok bool) {
 	x := s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
@@ -201,21 +201,21 @@ func (s *OrderedMap[T]) Load(key T) (value any, ok bool) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
-			return nil, false
+			return
 		}
 	}
-	return nil, false
+	return
 }
 
 // LoadAndDelete deletes the value for a key, returning the previous value if any.
 // The loaded result reports whether the key was present.
 // (Modified from Delete)
-func (s *OrderedMap[T]) LoadAndDelete(key T) (value any, loaded bool) {
+func (s *OrderedMap[keyT, valueT]) LoadAndDelete(key keyT) (value valueT, loaded bool) {
 	var (
-		nodeToDelete *orderednode[T]
+		nodeToDelete *orderednode[keyT, valueT]
 		isMarked     bool // represents if this operation mark the node
 		topLayer     = -1
-		preds, succs [maxLevel]*orderednode[T]
+		preds, succs [maxLevel]*orderednode[keyT, valueT]
 	)
 	for {
 		lFound := s.findNodeDelete(key, &preds, &succs)
@@ -229,7 +229,7 @@ func (s *OrderedMap[T]) LoadAndDelete(key T) (value any, loaded bool) {
 					// The node is marked by another process,
 					// the physical deletion will be accomplished by another process.
 					nodeToDelete.mu.Unlock()
-					return nil, false
+					return
 				}
 				nodeToDelete.flags.SetTrue(marked)
 				isMarked = true
@@ -238,7 +238,7 @@ func (s *OrderedMap[T]) LoadAndDelete(key T) (value any, loaded bool) {
 			var (
 				highestLocked        = -1 // the highest level being locked by this process
 				valid                = true
-				pred, succ, prevPred *orderednode[T]
+				pred, succ, prevPred *orderednode[keyT, valueT]
 			)
 			for layer := 0; valid && (layer <= topLayer); layer++ {
 				pred, succ = preds[layer], succs[layer]
@@ -268,7 +268,7 @@ func (s *OrderedMap[T]) LoadAndDelete(key T) (value any, loaded bool) {
 			atomic.AddInt64(&s.length, -1)
 			return nodeToDelete.loadVal(), true
 		}
-		return nil, false
+		return
 	}
 }
 
@@ -276,9 +276,9 @@ func (s *OrderedMap[T]) LoadAndDelete(key T) (value any, loaded bool) {
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from Store)
-func (s *OrderedMap[T]) LoadOrStore(key T, value any) (actual any, loaded bool) {
+func (s *OrderedMap[keyT, valueT]) LoadOrStore(key keyT, value valueT) (actual valueT, loaded bool) {
 	level := s.randomlevel()
-	var preds, succs [maxLevel]*orderednode[T]
+	var preds, succs [maxLevel]*orderednode[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -296,7 +296,7 @@ func (s *OrderedMap[T]) LoadOrStore(key T, value any) (actual any, loaded bool) 
 		var (
 			highestLocked        = -1 // the highest level being locked by this process
 			valid                = true
-			pred, succ, prevPred *orderednode[T]
+			pred, succ, prevPred *orderednode[keyT, valueT]
 		)
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
@@ -333,9 +333,9 @@ func (s *OrderedMap[T]) LoadOrStore(key T, value any) (actual any, loaded bool) 
 // Otherwise, it stores and returns the given value from f, f will only be called once.
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from LoadOrStore)
-func (s *OrderedMap[T]) LoadOrStoreLazy(key T, f func() any) (actual any, loaded bool) {
+func (s *OrderedMap[keyT, valueT]) LoadOrStoreLazy(key keyT, f func() valueT) (actual valueT, loaded bool) {
 	level := s.randomlevel()
-	var preds, succs [maxLevel]*orderednode[T]
+	var preds, succs [maxLevel]*orderednode[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -353,7 +353,7 @@ func (s *OrderedMap[T]) LoadOrStoreLazy(key T, f func() any) (actual any, loaded
 		var (
 			highestLocked        = -1 // the highest level being locked by this process
 			valid                = true
-			pred, succ, prevPred *orderednode[T]
+			pred, succ, prevPred *orderednode[keyT, valueT]
 		)
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
@@ -387,12 +387,12 @@ func (s *OrderedMap[T]) LoadOrStoreLazy(key T, f func() any) (actual any, loaded
 }
 
 // Delete deletes the value for a key.
-func (s *OrderedMap[T]) Delete(key T) bool {
+func (s *OrderedMap[keyT, valueT]) Delete(key keyT) bool {
 	var (
-		nodeToDelete *orderednode[T]
+		nodeToDelete *orderednode[keyT, valueT]
 		isMarked     bool // represents if this operation mark the node
 		topLayer     = -1
-		preds, succs [maxLevel]*orderednode[T]
+		preds, succs [maxLevel]*orderednode[keyT, valueT]
 	)
 	for {
 		lFound := s.findNodeDelete(key, &preds, &succs)
@@ -415,7 +415,7 @@ func (s *OrderedMap[T]) Delete(key T) bool {
 			var (
 				highestLocked        = -1 // the highest level being locked by this process
 				valid                = true
-				pred, succ, prevPred *orderednode[T]
+				pred, succ, prevPred *orderednode[keyT, valueT]
 			)
 			for layer := 0; valid && (layer <= topLayer); layer++ {
 				pred, succ = preds[layer], succs[layer]
@@ -456,7 +456,7 @@ func (s *OrderedMap[T]) Delete(key T) bool {
 // contents: no key will be visited more than once, but if the value for any key
 // is stored or deleted concurrently, Range may reflect any mapping for that key
 // from any point during the Range call.
-func (s *OrderedMap[T]) Range(f func(key T, value any) bool) {
+func (s *OrderedMap[keyT, valueT]) Range(f func(key keyT, value valueT) bool) {
 	x := s.header.atomicLoadNext(0)
 	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
@@ -471,6 +471,6 @@ func (s *OrderedMap[T]) Range(f func(key T, value any) bool) {
 }
 
 // Len returns the length of this skipmap.
-func (s *OrderedMap[T]) Len() int {
+func (s *OrderedMap[keyT, valueT]) Len() int {
 	return int(atomic.LoadInt64(&s.length))
 }

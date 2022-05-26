@@ -17,13 +17,13 @@ type {{.StructPrefix}}Map{{.StructSuffix}}{{.TypeParam}} struct {
 type {{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeParam}} struct {
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   {{.Type}}
+	key   {{.KeyType}}
 	next  optionalArray  // [level]*{{.StructPrefixLow}}node{{.StructSuffix}}
 	mu    sync.Mutex
 	level uint32
 }
 
-func new{{.StructPrefix}}Node{{.StructSuffix}}{{.TypeParam}}(key {{.Type}}, value any, level int) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
+func new{{.StructPrefix}}Node{{.StructSuffix}}{{.TypeParam}}(key {{.KeyType}}, value {{.ValueType}}, level int) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
 	node := &{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}{
 		key:   key,
 		level: uint32(level),
@@ -35,12 +35,12 @@ func new{{.StructPrefix}}Node{{.StructSuffix}}{{.TypeParam}}(key {{.Type}}, valu
 	return node
 }
 
-func (n *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) storeVal(value any) {
+func (n *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) storeVal(value {{.ValueType}}) {
 	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
-func (n *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) loadVal() any {
-	return *(*any)(atomic.LoadPointer(&n.value))
+func (n *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) loadVal() {{.ValueType}} {
+	return *(*{{.ValueType}})(atomic.LoadPointer(&n.value))
 }
 
 func (n *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) loadNext(i int) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
@@ -62,7 +62,7 @@ func (n *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) atomicStore
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
 // The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNode(key {{.Type}}, preds *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}, succs *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNode(key {{.KeyType}}, preds *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}, succs *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
 	x := s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
@@ -83,7 +83,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNode(key {{
 
 // findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
 // The returned preds and succs always satisfy preds[i] > key >= succs[i].
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNodeDelete(key {{.Type}}, preds *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}, succs *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) int {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNodeDelete(key {{.KeyType}}, preds *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}, succs *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
@@ -114,7 +114,7 @@ func unlock{{.Name}}{{.TypeParam}}(preds [maxLevel]*{{.StructPrefixLow}}node{{.S
 }
 
 // Store sets the value for a key.
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Store(key {{.Type}}, value any) {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Store(key {{.KeyType}}, value {{.ValueType}}) {
 	level := s.randomlevel()
 	var preds, succs [maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 	for {
@@ -186,7 +186,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) randomlevel() i
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
 // The ok result indicates whether value was found in the map.
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Load(key {{.Type}}) (value any, ok bool) {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Load(key {{.KeyType}}) (value {{.ValueType}}, ok bool) {
 	x := s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
@@ -200,16 +200,16 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Load(key {{.Typ
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
-			return nil, false
+			return
 		}
 	}
-	return nil, false
+	return
 }
 
 // LoadAndDelete deletes the value for a key, returning the previous value if any.
 // The loaded result reports whether the key was present.
 // (Modified from Delete)
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadAndDelete(key {{.Type}}) (value any, loaded bool) {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadAndDelete(key {{.KeyType}}) (value {{.ValueType}}, loaded bool) {
 	var (
 		nodeToDelete *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 		isMarked     bool // represents if this operation mark the node
@@ -228,7 +228,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadAndDelete(k
 					// The node is marked by another process,
 					// the physical deletion will be accomplished by another process.
 					nodeToDelete.mu.Unlock()
-					return nil, false
+					return
 				}
 				nodeToDelete.flags.SetTrue(marked)
 				isMarked = true
@@ -267,7 +267,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadAndDelete(k
 			atomic.AddInt64(&s.length, -1)
 			return nodeToDelete.loadVal(), true
 		}
-		return nil, false
+		return
 	}
 }
 
@@ -275,7 +275,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadAndDelete(k
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from Store)
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStore(key {{.Type}}, value any) (actual any, loaded bool) {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStore(key {{.KeyType}}, value {{.ValueType}}) (actual {{.ValueType}}, loaded bool) {
 	level := s.randomlevel()
 	var preds, succs [maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 	for {
@@ -332,7 +332,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStore(key
 // Otherwise, it stores and returns the given value from f, f will only be called once.
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from LoadOrStore)
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStoreLazy(key {{.Type}}, f func() any) (actual any, loaded bool) {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStoreLazy(key {{.KeyType}}, f func() {{.ValueType}}) (actual {{.ValueType}}, loaded bool) {
 	level := s.randomlevel()
 	var preds, succs [maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 	for {
@@ -386,7 +386,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStoreLazy
 }
 
 // Delete deletes the value for a key.
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Delete(key {{.Type}}) bool {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Delete(key {{.KeyType}}) bool {
 	var (
 		nodeToDelete *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 		isMarked     bool // represents if this operation mark the node
@@ -455,7 +455,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Delete(key {{.T
 // contents: no key will be visited more than once, but if the value for any key
 // is stored or deleted concurrently, Range may reflect any mapping for that key
 // from any point during the Range call.
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Range(f func(key {{.Type}}, value any) bool) {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Range(f func(key {{.KeyType}}, value {{.ValueType}}) bool) {
 	x := s.header.atomicLoadNext(0)
 	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {

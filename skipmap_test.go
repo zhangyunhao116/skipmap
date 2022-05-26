@@ -12,22 +12,28 @@ import (
 	"github.com/zhangyunhao116/fastrand"
 )
 
+func TestSimple(t *testing.T) {
+	// x := New[int, int]()
+	// x.Store(1, 2)
+	// println(1, 2)
+}
+
 func TestTyped(t *testing.T) {
-	testSkipMapInt(t, func() anyskipmap[int] { return NewInt() })
-	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewIntDesc() })
-	testSkipMapString(t, func() anyskipmap[string] { return NewString() })
-	testSyncMapSuiteInt64(t, func() anyskipmap[int64] { return NewInt64() })
+	testSkipMapInt(t, func() anyskipmap[int] { return NewInt[any]() })
+	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewIntDesc[any]() })
+	testSkipMapString(t, func() anyskipmap[string] { return NewString[any]() })
+	testSyncMapSuiteInt64(t, func() anyskipmap[int64] { return NewInt64[any]() })
 }
 
 func TestOrdered(t *testing.T) {
-	testSkipMapInt(t, func() anyskipmap[int] { return New[int]() })
-	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewDesc[int]() })
-	testSkipMapString(t, func() anyskipmap[string] { return New[string]() })
-	testSyncMapSuiteInt64(t, func() anyskipmap[int64] { return New[int64]() })
+	testSkipMapInt(t, func() anyskipmap[int] { return New[int, any]() })
+	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewDesc[int, any]() })
+	testSkipMapString(t, func() anyskipmap[string] { return New[string, any]() })
+	testSyncMapSuiteInt64(t, func() anyskipmap[int64] { return New[int64, any]() })
 }
 
 func TestFunc(t *testing.T) {
-	testSkipMapInt(t, func() anyskipmap[int] { return NewFunc(func(a, b int) bool { return a < b }) })
+	testSkipMapInt(t, func() anyskipmap[int] { return NewFunc[int, any](func(a, b int) bool { return a < b }) })
 }
 
 type anyskipmap[T any] interface {

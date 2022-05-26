@@ -18,7 +18,7 @@ const (
 func BenchmarkInt64(b *testing.B) {
 	all := []benchInt64Task{{
 		name: "skipmap", New: func() int64Map {
-			return NewInt64()
+			return NewInt64[any]()
 		}}}
 	all = append(all, benchInt64Task{
 		name: "sync.Map", New: func() int64Map {
@@ -34,7 +34,7 @@ func BenchmarkInt64(b *testing.B) {
 func BenchmarkString(b *testing.B) {
 	all := []benchStringTask{{
 		name: "skipmap", New: func() stringMap {
-			return NewString()
+			return NewString[any]()
 		}}}
 	all = append(all, benchStringTask{
 		name: "sync.Map", New: func() stringMap {

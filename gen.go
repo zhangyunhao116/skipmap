@@ -1,4 +1,5 @@
 //go:build ignore
+// +build ignore
 
 package main
 
@@ -34,10 +35,11 @@ type Variant struct {
 	StructSuffix    string
 	ExtraFileds     string
 
-	// Basic type. T or "".
-	Type string
+	// Basic key and value type.
+	KeyType   string
+	ValueType string
 
-	// Basic type argument. [T] or "".
+	// Basic type argument.
 	TypeArgument string
 
 	// TypeParam is the optional type parameter for the function.
@@ -60,9 +62,10 @@ func main() {
 		Name:            "ordered",
 		Path:            "gen_ordered.go",
 		Imports:         "\"sync\"\n\"sync/atomic\"\n\"unsafe\"\n",
-		Type:            "T",
-		TypeArgument:    "[T]",
-		TypeParam:       "[T ordered]",
+		KeyType:         "keyT",
+		ValueType:       "valueT",
+		TypeArgument:    "[keyT, valueT]",
+		TypeParam:       "[keyT ordered, valueT any]",
 		StructPrefix:    "Ordered",
 		StructPrefixLow: "ordered",
 		StructSuffix:    "",
@@ -95,10 +98,11 @@ func main() {
 		Name:            "func",
 		Path:            "gen_func.go",
 		Imports:         "\"sync\"\n\"sync/atomic\"\n\"unsafe\"\n",
-		Type:            "T",
-		TypeArgument:    "[T]",
-		TypeParam:       "[T any]",
-		ExtraFileds:     "\nless func(a,b T)bool\n",
+		KeyType:         "keyT",
+		ValueType:       "valueT",
+		TypeArgument:    "[keyT, valueT]",
+		TypeParam:       "[keyT ordered, valueT any]",
+		ExtraFileds:     "\nless func(a,b keyT)bool\n",
 		StructPrefix:    "Func",
 		StructPrefixLow: "func",
 		StructSuffix:    "",
@@ -121,9 +125,10 @@ func main() {
 			Name:            "{{TypeLow}}",
 			Path:            "gen_{{TypeLow}}.go",
 			Imports:         "\"sync\"\n\"sync/atomic\"\n\"unsafe\"\n",
-			Type:            "{{TypeLow}}",
-			TypeArgument:    "",
-			TypeParam:       "",
+			KeyType:         "{{TypeLow}}",
+			ValueType:       "valueT",
+			TypeArgument:    "[valueT]",
+			TypeParam:       "[valueT any]",
 			StructPrefix:    "{{Type}}",
 			StructPrefixLow: "{{TypeLow}}",
 			StructSuffix:    "",
@@ -141,9 +146,10 @@ func main() {
 			Name:            "{{TypeLow}}Desc",
 			Path:            "gen_{{TypeLow}}desc.go",
 			Imports:         "\"sync\"\n\"sync/atomic\"\n\"unsafe\"\n",
-			Type:            "{{TypeLow}}",
-			TypeArgument:    "",
-			TypeParam:       "",
+			KeyType:         "{{TypeLow}}",
+			ValueType:       "valueT",
+			TypeArgument:    "[valueT]",
+			TypeParam:       "[valueT any]",
 			StructPrefix:    "{{Type}}",
 			StructPrefixLow: "{{TypeLow}}",
 			StructSuffix:    "Desc",
@@ -160,13 +166,13 @@ func main() {
 		baseType.StructPrefix = strings.Replace(baseType.StructPrefix, "{{Type}}", t, -1)
 		baseType.Name = strings.Replace(baseType.Name, "{{TypeLow}}", tl, -1)
 		baseType.Path = strings.Replace(baseType.Path, "{{TypeLow}}", tl, -1)
-		baseType.Type = strings.Replace(baseType.Type, "{{TypeLow}}", tl, -1)
+		baseType.KeyType = strings.Replace(baseType.KeyType, "{{TypeLow}}", tl, -1)
 		baseType.StructPrefixLow = strings.Replace(baseType.StructPrefixLow, "{{TypeLow}}", tl, -1)
 
 		baseTypeDesc.StructPrefix = strings.Replace(baseTypeDesc.StructPrefix, "{{Type}}", t, -1)
 		baseTypeDesc.Name = strings.Replace(baseTypeDesc.Name, "{{TypeLow}}", tl, -1)
 		baseTypeDesc.Path = strings.Replace(baseTypeDesc.Path, "{{TypeLow}}", tl, -1)
-		baseTypeDesc.Type = strings.Replace(baseTypeDesc.Type, "{{TypeLow}}", tl, -1)
+		baseTypeDesc.KeyType = strings.Replace(baseTypeDesc.KeyType, "{{TypeLow}}", tl, -1)
 		baseTypeDesc.StructPrefixLow = strings.Replace(baseTypeDesc.StructPrefixLow, "{{TypeLow}}", tl, -1)
 
 		generate(baseType)

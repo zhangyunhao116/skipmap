@@ -4,7 +4,7 @@
 
 ## Introduction
 
-> From v0.8.0, the skipmap requires Go version >= 1.18, if your Go version is lower, use v0.7.0 instead.
+> If your Go version is lower than 1.18, use v0.7.0 instead.
 
 skipmap is a high-performance, scalable, concurrent-safe map based on skip-list. In the typical pattern(100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipmap up to 10x faster than the built-in sync.Map.
 
@@ -45,10 +45,10 @@ import (
 )
 
 func main() {
-	l := skipmap.NewInt()
+	l := skipmap.NewInt[string]()
 
 	for _, v := range []int{10, 12, 15} {
-		l.Store(v, v+100)
+		l.Store(v, strconv.Itoa(v+100))
 	}
 
 	v, ok := l.Load(10)
@@ -56,7 +56,7 @@ func main() {
 		fmt.Println("skipmap load 10 with value ", v)
 	}
 
-	l.Range(func(key int, value interface{}) bool {
+	l.Range(func(key int, value string) bool {
 		fmt.Println("skipmap range found ", key, value)
 		return true
 	})
@@ -67,11 +67,11 @@ func main() {
 
 ```
 
-From `v0.8.0`, you can use generic version APIs.
+From `v0.9.0`, you can use generic version APIs.
 
 **Note that generic APIs are always slower than typed APIs, but are more suitable for some scenarios such as functional programming.**
 
-> e.g. `New[int]` is \~2x slower than `NewInt`, and `NewFunc(func(a, b int) bool { return a < b })` is 1\~2x slower than `New[int]`.
+> e.g. `New[string,int]` is \~2x slower than `NewString[int]`, and `NewFunc[string,int](func(a, b string) bool { return a < b })` is 1\~2x slower than `NewString[int]`.
 >
 > Performance ranking: NewInt > New[Int] > NewFunc(func(a, b int) bool { return a < b })
 
@@ -83,20 +83,20 @@ import (
 )
 
 func main() {
-	m1 := skipmap.New[int]()
+	m1 := skipmap.New[string, int]()
 	for _, v := range []int{10, 12, 15} {
-		m1.Store(v, v+100)
+		m1.Store(strconv.Itoa(v), v+100)
 	}
-	m1.Range(func(key int, value interface{}) bool {
+	m1.Range(func(key string, value int) bool {
 		println("m1 found ", key, value)
 		return true
 	})
 
-	m2 := skipmap.NewFunc(func(a, b int) bool { return a < b })
+	m2 := skipmap.NewFunc[int, string](func(a, b int) bool { return a < b })
 	for _, v := range []int{10, 12, 15} {
-		m2.Store(v, v+200)
+		m2.Store(v, strconv.Itoa(v+200))
 	}
-	m2.Range(func(key int, value interface{}) bool {
+	m2.Range(func(key int, value string) bool {
 		println("m2 found ", key, value)
 		return true
 	})

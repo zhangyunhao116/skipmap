@@ -9,23 +9,23 @@ import (
 )
 
 // OrderedMapDesc represents a map based on skip list.
-type OrderedMapDesc[T ordered] struct {
+type OrderedMapDesc[keyT ordered, valueT any] struct {
 	length       int64
 	highestLevel uint64 // highest level for now
-	header       *orderednodeDesc[T]
+	header       *orderednodeDesc[keyT, valueT]
 }
 
-type orderednodeDesc[T ordered] struct {
+type orderednodeDesc[keyT ordered, valueT any] struct {
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   T
+	key   keyT
 	next  optionalArray // [level]*orderednodeDesc
 	mu    sync.Mutex
 	level uint32
 }
 
-func newOrderedNodeDesc[T ordered](key T, value any, level int) *orderednodeDesc[T] {
-	node := &orderednodeDesc[T]{
+func newOrderedNodeDesc[keyT ordered, valueT any](key keyT, value valueT, level int) *orderednodeDesc[keyT, valueT] {
+	node := &orderednodeDesc[keyT, valueT]{
 		key:   key,
 		level: uint32(level),
 	}
@@ -36,34 +36,34 @@ func newOrderedNodeDesc[T ordered](key T, value any, level int) *orderednodeDesc
 	return node
 }
 
-func (n *orderednodeDesc[T]) storeVal(value any) {
+func (n *orderednodeDesc[keyT, valueT]) storeVal(value valueT) {
 	atomic.StorePointer(&n.value, unsafe.Pointer(&value))
 }
 
-func (n *orderednodeDesc[T]) loadVal() any {
-	return *(*any)(atomic.LoadPointer(&n.value))
+func (n *orderednodeDesc[keyT, valueT]) loadVal() valueT {
+	return *(*valueT)(atomic.LoadPointer(&n.value))
 }
 
-func (n *orderednodeDesc[T]) loadNext(i int) *orderednodeDesc[T] {
-	return (*orderednodeDesc[T])(n.next.load(i))
+func (n *orderednodeDesc[keyT, valueT]) loadNext(i int) *orderednodeDesc[keyT, valueT] {
+	return (*orderednodeDesc[keyT, valueT])(n.next.load(i))
 }
 
-func (n *orderednodeDesc[T]) storeNext(i int, node *orderednodeDesc[T]) {
+func (n *orderednodeDesc[keyT, valueT]) storeNext(i int, node *orderednodeDesc[keyT, valueT]) {
 	n.next.store(i, unsafe.Pointer(node))
 }
 
-func (n *orderednodeDesc[T]) atomicLoadNext(i int) *orderednodeDesc[T] {
-	return (*orderednodeDesc[T])(n.next.atomicLoad(i))
+func (n *orderednodeDesc[keyT, valueT]) atomicLoadNext(i int) *orderednodeDesc[keyT, valueT] {
+	return (*orderednodeDesc[keyT, valueT])(n.next.atomicLoad(i))
 }
 
-func (n *orderednodeDesc[T]) atomicStoreNext(i int, node *orderednodeDesc[T]) {
+func (n *orderednodeDesc[keyT, valueT]) atomicStoreNext(i int, node *orderednodeDesc[keyT, valueT]) {
 	n.next.atomicStore(i, unsafe.Pointer(node))
 }
 
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
 // The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *OrderedMapDesc[T]) findNode(key T, preds *[maxLevel]*orderednodeDesc[T], succs *[maxLevel]*orderednodeDesc[T]) *orderednodeDesc[T] {
+func (s *OrderedMapDesc[keyT, valueT]) findNode(key keyT, preds *[maxLevel]*orderednodeDesc[keyT, valueT], succs *[maxLevel]*orderednodeDesc[keyT, valueT]) *orderednodeDesc[keyT, valueT] {
 	x := s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
@@ -84,7 +84,7 @@ func (s *OrderedMapDesc[T]) findNode(key T, preds *[maxLevel]*orderednodeDesc[T]
 
 // findNodeDelete takes a key and two maximal-height arrays then searches exactly as in a sequential skip-list.
 // The returned preds and succs always satisfy preds[i] > key >= succs[i].
-func (s *OrderedMapDesc[T]) findNodeDelete(key T, preds *[maxLevel]*orderednodeDesc[T], succs *[maxLevel]*orderednodeDesc[T]) int {
+func (s *OrderedMapDesc[keyT, valueT]) findNodeDelete(key keyT, preds *[maxLevel]*orderednodeDesc[keyT, valueT], succs *[maxLevel]*orderednodeDesc[keyT, valueT]) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
@@ -104,8 +104,8 @@ func (s *OrderedMapDesc[T]) findNodeDelete(key T, preds *[maxLevel]*orderednodeD
 	return lFound
 }
 
-func unlockorderedDesc[T ordered](preds [maxLevel]*orderednodeDesc[T], highestLevel int) {
-	var prevPred *orderednodeDesc[T]
+func unlockorderedDesc[keyT ordered, valueT any](preds [maxLevel]*orderednodeDesc[keyT, valueT], highestLevel int) {
+	var prevPred *orderednodeDesc[keyT, valueT]
 	for i := highestLevel; i >= 0; i-- {
 		if preds[i] != prevPred { // the node could be unlocked by previous loop
 			preds[i].mu.Unlock()
@@ -115,9 +115,9 @@ func unlockorderedDesc[T ordered](preds [maxLevel]*orderednodeDesc[T], highestLe
 }
 
 // Store sets the value for a key.
-func (s *OrderedMapDesc[T]) Store(key T, value any) {
+func (s *OrderedMapDesc[keyT, valueT]) Store(key keyT, value valueT) {
 	level := s.randomlevel()
-	var preds, succs [maxLevel]*orderednodeDesc[T]
+	var preds, succs [maxLevel]*orderednodeDesc[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -136,7 +136,7 @@ func (s *OrderedMapDesc[T]) Store(key T, value any) {
 		var (
 			highestLocked        = -1 // the highest level being locked by this process
 			valid                = true
-			pred, succ, prevPred *orderednodeDesc[T]
+			pred, succ, prevPred *orderednodeDesc[keyT, valueT]
 		)
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
@@ -168,7 +168,7 @@ func (s *OrderedMapDesc[T]) Store(key T, value any) {
 	}
 }
 
-func (s *OrderedMapDesc[T]) randomlevel() int {
+func (s *OrderedMapDesc[keyT, valueT]) randomlevel() int {
 	// Generate random level.
 	level := randomLevel()
 	// Update highest level if possible.
@@ -187,7 +187,7 @@ func (s *OrderedMapDesc[T]) randomlevel() int {
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
 // The ok result indicates whether value was found in the map.
-func (s *OrderedMapDesc[T]) Load(key T) (value any, ok bool) {
+func (s *OrderedMapDesc[keyT, valueT]) Load(key keyT) (value valueT, ok bool) {
 	x := s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
@@ -201,21 +201,21 @@ func (s *OrderedMapDesc[T]) Load(key T) (value any, ok bool) {
 			if nex.flags.MGet(fullyLinked|marked, fullyLinked) {
 				return nex.loadVal(), true
 			}
-			return nil, false
+			return
 		}
 	}
-	return nil, false
+	return
 }
 
 // LoadAndDelete deletes the value for a key, returning the previous value if any.
 // The loaded result reports whether the key was present.
 // (Modified from Delete)
-func (s *OrderedMapDesc[T]) LoadAndDelete(key T) (value any, loaded bool) {
+func (s *OrderedMapDesc[keyT, valueT]) LoadAndDelete(key keyT) (value valueT, loaded bool) {
 	var (
-		nodeToDelete *orderednodeDesc[T]
+		nodeToDelete *orderednodeDesc[keyT, valueT]
 		isMarked     bool // represents if this operation mark the node
 		topLayer     = -1
-		preds, succs [maxLevel]*orderednodeDesc[T]
+		preds, succs [maxLevel]*orderednodeDesc[keyT, valueT]
 	)
 	for {
 		lFound := s.findNodeDelete(key, &preds, &succs)
@@ -229,7 +229,7 @@ func (s *OrderedMapDesc[T]) LoadAndDelete(key T) (value any, loaded bool) {
 					// The node is marked by another process,
 					// the physical deletion will be accomplished by another process.
 					nodeToDelete.mu.Unlock()
-					return nil, false
+					return
 				}
 				nodeToDelete.flags.SetTrue(marked)
 				isMarked = true
@@ -238,7 +238,7 @@ func (s *OrderedMapDesc[T]) LoadAndDelete(key T) (value any, loaded bool) {
 			var (
 				highestLocked        = -1 // the highest level being locked by this process
 				valid                = true
-				pred, succ, prevPred *orderednodeDesc[T]
+				pred, succ, prevPred *orderednodeDesc[keyT, valueT]
 			)
 			for layer := 0; valid && (layer <= topLayer); layer++ {
 				pred, succ = preds[layer], succs[layer]
@@ -268,7 +268,7 @@ func (s *OrderedMapDesc[T]) LoadAndDelete(key T) (value any, loaded bool) {
 			atomic.AddInt64(&s.length, -1)
 			return nodeToDelete.loadVal(), true
 		}
-		return nil, false
+		return
 	}
 }
 
@@ -276,9 +276,9 @@ func (s *OrderedMapDesc[T]) LoadAndDelete(key T) (value any, loaded bool) {
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from Store)
-func (s *OrderedMapDesc[T]) LoadOrStore(key T, value any) (actual any, loaded bool) {
+func (s *OrderedMapDesc[keyT, valueT]) LoadOrStore(key keyT, value valueT) (actual valueT, loaded bool) {
 	level := s.randomlevel()
-	var preds, succs [maxLevel]*orderednodeDesc[T]
+	var preds, succs [maxLevel]*orderednodeDesc[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -296,7 +296,7 @@ func (s *OrderedMapDesc[T]) LoadOrStore(key T, value any) (actual any, loaded bo
 		var (
 			highestLocked        = -1 // the highest level being locked by this process
 			valid                = true
-			pred, succ, prevPred *orderednodeDesc[T]
+			pred, succ, prevPred *orderednodeDesc[keyT, valueT]
 		)
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
@@ -333,9 +333,9 @@ func (s *OrderedMapDesc[T]) LoadOrStore(key T, value any) (actual any, loaded bo
 // Otherwise, it stores and returns the given value from f, f will only be called once.
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from LoadOrStore)
-func (s *OrderedMapDesc[T]) LoadOrStoreLazy(key T, f func() any) (actual any, loaded bool) {
+func (s *OrderedMapDesc[keyT, valueT]) LoadOrStoreLazy(key keyT, f func() valueT) (actual valueT, loaded bool) {
 	level := s.randomlevel()
-	var preds, succs [maxLevel]*orderednodeDesc[T]
+	var preds, succs [maxLevel]*orderednodeDesc[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -353,7 +353,7 @@ func (s *OrderedMapDesc[T]) LoadOrStoreLazy(key T, f func() any) (actual any, lo
 		var (
 			highestLocked        = -1 // the highest level being locked by this process
 			valid                = true
-			pred, succ, prevPred *orderednodeDesc[T]
+			pred, succ, prevPred *orderednodeDesc[keyT, valueT]
 		)
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
@@ -387,12 +387,12 @@ func (s *OrderedMapDesc[T]) LoadOrStoreLazy(key T, f func() any) (actual any, lo
 }
 
 // Delete deletes the value for a key.
-func (s *OrderedMapDesc[T]) Delete(key T) bool {
+func (s *OrderedMapDesc[keyT, valueT]) Delete(key keyT) bool {
 	var (
-		nodeToDelete *orderednodeDesc[T]
+		nodeToDelete *orderednodeDesc[keyT, valueT]
 		isMarked     bool // represents if this operation mark the node
 		topLayer     = -1
-		preds, succs [maxLevel]*orderednodeDesc[T]
+		preds, succs [maxLevel]*orderednodeDesc[keyT, valueT]
 	)
 	for {
 		lFound := s.findNodeDelete(key, &preds, &succs)
@@ -415,7 +415,7 @@ func (s *OrderedMapDesc[T]) Delete(key T) bool {
 			var (
 				highestLocked        = -1 // the highest level being locked by this process
 				valid                = true
-				pred, succ, prevPred *orderednodeDesc[T]
+				pred, succ, prevPred *orderednodeDesc[keyT, valueT]
 			)
 			for layer := 0; valid && (layer <= topLayer); layer++ {
 				pred, succ = preds[layer], succs[layer]
@@ -456,7 +456,7 @@ func (s *OrderedMapDesc[T]) Delete(key T) bool {
 // contents: no key will be visited more than once, but if the value for any key
 // is stored or deleted concurrently, Range may reflect any mapping for that key
 // from any point during the Range call.
-func (s *OrderedMapDesc[T]) Range(f func(key T, value any) bool) {
+func (s *OrderedMapDesc[keyT, valueT]) Range(f func(key keyT, value valueT) bool) {
 	x := s.header.atomicLoadNext(0)
 	for x != nil {
 		if !x.flags.MGet(fullyLinked|marked, fullyLinked) {
@@ -471,6 +471,6 @@ func (s *OrderedMapDesc[T]) Range(f func(key T, value any) bool) {
 }
 
 // Len returns the length of this skipmap.
-func (s *OrderedMapDesc[T]) Len() int {
+func (s *OrderedMapDesc[keyT, valueT]) Len() int {
 	return int(atomic.LoadInt64(&s.length))
 }

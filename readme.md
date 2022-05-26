@@ -45,46 +45,29 @@ import (
 )
 
 func main() {
-	l := skipmap.NewInt[string]()
+	// Typed key and generic value.
+	m0 := skipmap.NewString[int]()
 
 	for _, v := range []int{10, 12, 15} {
-		l.Store(v, strconv.Itoa(v+100))
+		m0.Store(strconv.Itoa(v), v+100)
 	}
 
-	v, ok := l.Load(10)
+	v, ok := m0.Load("10")
 	if ok {
 		fmt.Println("skipmap load 10 with value ", v)
 	}
 
-	l.Range(func(key int, value string) bool {
+	m0.Range(func(key string, value int) bool {
 		fmt.Println("skipmap range found ", key, value)
 		return true
 	})
 
-	l.Delete(15)
-	fmt.Printf("skipmap contains %d items\r\n", l.Len())
-}
+	m0.Delete("15")
+	fmt.Printf("skipmap contains %d items\r\n", m0.Len())
 
-```
-
-From `v0.9.0`, you can use generic version APIs.
-
-**Note that generic APIs are always slower than typed APIs, but are more suitable for some scenarios such as functional programming.**
-
-> e.g. `New[string,int]` is \~2x slower than `NewString[int]`, and `NewFunc[string,int](func(a, b string) bool { return a < b })` is 1\~2x slower than `NewString[int]`.
->
-> Performance ranking: `NewString[int]` > `New[string,int]` > `NewFunc[string,int](func(a, b string) bool { return a < b })`
-
-```go
-package main
-
-import (
-	"github.com/zhangyunhao116/skipmap"
-)
-
-func main() {
+	// Generic key and value.
 	m1 := skipmap.New[string, int]()
-	for _, v := range []int{10, 12, 15} {
+	for _, v := range []int{11, 13, 16} {
 		m1.Store(strconv.Itoa(v), v+100)
 	}
 	m1.Range(func(key string, value int) bool {
@@ -92,8 +75,9 @@ func main() {
 		return true
 	})
 
+	// Generic key and value with less function.
 	m2 := skipmap.NewFunc[int, string](func(a, b int) bool { return a < b })
-	for _, v := range []int{10, 12, 15} {
+	for _, v := range []int{15, 17, 19} {
 		m2.Store(v, strconv.Itoa(v+200))
 	}
 	m2.Range(func(key int, value string) bool {
@@ -103,6 +87,13 @@ func main() {
 }
 
 ```
+
+**Note that generic APIs are always slower than typed APIs, but are more suitable for some scenarios such as functional programming.**
+
+> e.g. `New[string,int]` is \~2x slower than `NewString[int]`, and `NewFunc[string,int](func(a, b string) bool { return a < b })` is 1\~2x slower than `NewString[int]`.
+>
+> Performance ranking: `NewString[int]` > `New[string,int]` > `NewFunc[string,int](func(a, b string) bool { return a < b })`
+
 
 ## Benchmark
 

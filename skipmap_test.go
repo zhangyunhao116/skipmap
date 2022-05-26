@@ -12,12 +12,6 @@ import (
 	"github.com/zhangyunhao116/fastrand"
 )
 
-func TestSimple(t *testing.T) {
-	// x := New[int, int]()
-	// x.Store(1, 2)
-	// println(1, 2)
-}
-
 func TestTyped(t *testing.T) {
 	testSkipMapInt(t, func() anyskipmap[int] { return NewInt[any]() })
 	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewIntDesc[any]() })

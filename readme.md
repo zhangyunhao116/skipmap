@@ -73,7 +73,7 @@ From `v0.9.0`, you can use generic version APIs.
 
 > e.g. `New[string,int]` is \~2x slower than `NewString[int]`, and `NewFunc[string,int](func(a, b string) bool { return a < b })` is 1\~2x slower than `NewString[int]`.
 >
-> Performance ranking: NewInt > New[Int] > NewFunc(func(a, b int) bool { return a < b })
+> Performance ranking: `NewString[int]` > `New[string,int]` > `NewFunc[string,int](func(a, b string) bool { return a < b })`
 
 ```go
 package main

@@ -15,7 +15,7 @@ func NewFunc[keyT ordered, valueT any](less func(a, b keyT) bool) *FuncMap[keyT,
 		t1 keyT
 		t2 valueT
 	)
-	h := newFuncNode[keyT, valueT](t1, t2, maxLevel)
+	h := newFuncNode(t1, t2, maxLevel)
 	h.flags.SetTrue(fullyLinked)
 	return &FuncMap[keyT, valueT]{
 		header:       h,
@@ -55,7 +55,7 @@ func NewDesc[keyT ordered, valueT any]() *OrderedMapDesc[keyT, valueT] {
 // NewString returns an empty skipmap in ascending order.
 func NewString[valueT any]() *StringMap[valueT] {
 	var t valueT
-	h := newStringNode[valueT]("", t, maxLevel)
+	h := newStringNode("", t, maxLevel)
 	h.flags.SetTrue(fullyLinked)
 	return &StringMap[valueT]{
 		header:       h,
@@ -66,7 +66,7 @@ func NewString[valueT any]() *StringMap[valueT] {
 // NewString returns an empty skipmap in descending order.
 func NewStringDesc[valueT any]() *StringMapDesc[valueT] {
 	var t valueT
-	h := newStringNodeDesc[valueT]("", t, maxLevel)
+	h := newStringNodeDesc("", t, maxLevel)
 	h.flags.SetTrue(fullyLinked)
 	return &StringMapDesc[valueT]{
 		header:       h,
@@ -77,7 +77,7 @@ func NewStringDesc[valueT any]() *StringMapDesc[valueT] {
 // NewFloat32 returns an empty skipmap in ascending order.
 func NewFloat32[valueT any]() *Float32Map[valueT] {
 	var t valueT
-	h := newFloat32Node[valueT](0, t, maxLevel)
+	h := newFloat32Node(0, t, maxLevel)
 	h.flags.SetTrue(fullyLinked)
 	return &Float32Map[valueT]{
 		header:       h,

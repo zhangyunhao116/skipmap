@@ -101,7 +101,7 @@ func main() {
 		KeyType:         "keyT",
 		ValueType:       "valueT",
 		TypeArgument:    "[keyT, valueT]",
-		TypeParam:       "[keyT ordered, valueT any]",
+		TypeParam:       "[keyT any, valueT any]",
 		ExtraFileds:     "\nless func(a,b keyT)bool\n",
 		StructPrefix:    "Func",
 		StructPrefixLow: "func",

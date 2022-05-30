@@ -10,7 +10,7 @@ package skipmap
 // Note that the less function requires a strict weak ordering,
 // see https://en.wikipedia.org/wiki/Weak_ordering#Strict_weak_orderings,
 // or undefined behavior will happen.
-func NewFunc[keyT ordered, valueT any](less func(a, b keyT) bool) *FuncMap[keyT, valueT] {
+func NewFunc[keyT any, valueT any](less func(a, b keyT) bool) *FuncMap[keyT, valueT] {
 	var (
 		t1 keyT
 		t2 valueT

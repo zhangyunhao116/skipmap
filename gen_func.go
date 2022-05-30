@@ -9,7 +9,7 @@ import (
 )
 
 // FuncMap represents a map based on skip list.
-type FuncMap[keyT ordered, valueT any] struct {
+type FuncMap[keyT any, valueT any] struct {
 	length       int64
 	highestLevel uint64 // highest level for now
 	header       *funcnode[keyT, valueT]
@@ -17,7 +17,7 @@ type FuncMap[keyT ordered, valueT any] struct {
 	less func(a, b keyT) bool
 }
 
-type funcnode[keyT ordered, valueT any] struct {
+type funcnode[keyT any, valueT any] struct {
 	value unsafe.Pointer // *any
 	flags bitflag
 	key   keyT
@@ -26,7 +26,7 @@ type funcnode[keyT ordered, valueT any] struct {
 	level uint32
 }
 
-func newFuncNode[keyT ordered, valueT any](key keyT, value valueT, level int) *funcnode[keyT, valueT] {
+func newFuncNode[keyT any, valueT any](key keyT, value valueT, level int) *funcnode[keyT, valueT] {
 	node := &funcnode[keyT, valueT]{
 		key:   key,
 		level: uint32(level),
@@ -106,7 +106,7 @@ func (s *FuncMap[keyT, valueT]) findNodeDelete(key keyT, preds *[maxLevel]*funcn
 	return lFound
 }
 
-func unlockfunc[keyT ordered, valueT any](preds [maxLevel]*funcnode[keyT, valueT], highestLevel int) {
+func unlockfunc[keyT any, valueT any](preds [maxLevel]*funcnode[keyT, valueT], highestLevel int) {
 	var prevPred *funcnode[keyT, valueT]
 	for i := highestLevel; i >= 0; i-- {
 		if preds[i] != prevPred { // the node could be unlocked by previous loop

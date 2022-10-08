@@ -1,6 +1,7 @@
 package skipmap
 
 import (
+	"math"
 	"math/rand"
 	"reflect"
 	"runtime"
@@ -459,4 +460,108 @@ func testSyncMapSuiteInt64(t *testing.T, newset func() anyskipmap[int64]) {
 			t.Fatalf("Range visited %v elements of %v-element Map", len(seen), mapSize)
 		}
 	}
+}
+
+func TestFloatMap(t *testing.T) {
+	cases := []struct {
+		k float64
+		v int
+	}{
+		{math.NaN(), 1},
+		{0.04, 1},
+		{math.NaN(), -1},
+		{0.05, 1},
+		{math.Inf(1), 1},
+		{0.04, 2},
+		{math.NaN(), 2},
+		{0.05, 2},
+		{math.Inf(-1), -1},
+		{math.Inf(1), 2},
+		{math.Inf(-1), 2},
+	}
+	m := NewFloat64[int]()
+	md := NewFloat64Desc[int]()
+	m32 := NewFloat32[int]()
+	m32d := NewFloat32Desc[int]()
+	for _, kv := range cases {
+		m.Store(kv.k, kv.v)
+		md.Store(kv.k, kv.v)
+		m32.Store(float32(kv.k), kv.v)
+		m32d.Store(float32(kv.k), kv.v)
+	}
+
+	var (
+		mr, mdr     []float64
+		m32r, m32dr []float32
+	)
+	m.Range(func(key float64, value int) bool {
+		mr = append(mr, key)
+		if value != 2 {
+			t.Fatal("invalid value", value)
+		}
+		return true
+	})
+	md.Range(func(key float64, value int) bool {
+		mdr = append(mdr, key)
+		if value != 2 {
+			t.Fatal("invalid value", value)
+		}
+		return true
+	})
+	m32.Range(func(key float32, value int) bool {
+		m32r = append(m32r, key)
+		if value != 2 {
+			t.Fatal("invalid value", value)
+		}
+		return true
+	})
+	m32d.Range(func(key float32, value int) bool {
+		m32dr = append(m32dr, key)
+		if value != 2 {
+			t.Fatal("invalid value", value)
+		}
+		return true
+	})
+
+	var (
+		asc = []float64{
+			math.NaN(), math.Inf(-1), 0.04, 0.05, math.Inf(1),
+		}
+		desc = []float64{
+			math.NaN(), math.Inf(1), 0.05, 0.04, math.Inf(-1),
+		}
+		asc32 = []float32{
+			float32(math.NaN()), float32(math.Inf(-1)), 0.04, 0.05, float32(math.Inf(1)),
+		}
+		desc32 = []float32{
+			float32(math.NaN()), float32(math.Inf(1)), 0.05, 0.04, float32(math.Inf(-1)),
+		}
+	)
+
+	checkEqual := func(a, b []float64) {
+		l := len(a)
+		if len(b) != l {
+			t.Fatal("invalid length", l)
+		}
+		for i := 0; i < l; i++ {
+			if a[i] != b[i] && !(math.IsNaN(a[i])) {
+				t.Fatal("not equal", i, a[i], b[i])
+			}
+		}
+	}
+	checkEqual32 := func(a, b []float32) {
+		l := len(a)
+		if len(b) != l {
+			t.Fatal("invalid length", l)
+		}
+		for i := 0; i < l; i++ {
+			if a[i] != b[i] && !(isNaNf32(a[i])) {
+				t.Fatal("not equal", i, a[i], b[i])
+			}
+		}
+	}
+	checkEqual(mr, asc)
+	checkEqual(mdr, desc)
+	checkEqual32(m32r, asc32)
+	checkEqual32(m32dr, desc32)
 }

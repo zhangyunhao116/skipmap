@@ -5,6 +5,8 @@
 //go:generate go run gen.go
 package skipmap
 
+import "math"
+
 // NewFunc returns an empty skipmap in ascending order.
 //
 // Note that the less function requires a strict weak ordering,
@@ -63,7 +65,7 @@ func NewString[valueT any]() *StringMap[valueT] {
 	}
 }
 
-// NewString returns an empty skipmap in descending order.
+// NewStringDesc returns an empty skipmap in descending order.
 func NewStringDesc[valueT any]() *StringMapDesc[valueT] {
 	var t valueT
 	h := newStringNodeDesc("", t, maxLevel)
@@ -74,48 +76,36 @@ func NewStringDesc[valueT any]() *StringMapDesc[valueT] {
 	}
 }
 
-// NewFloat32 returns an empty skipmap in ascending order.
-func NewFloat32[valueT any]() *Float32Map[valueT] {
-	var t valueT
-	h := newFloat32Node(0, t, maxLevel)
-	h.flags.SetTrue(fullyLinked)
-	return &Float32Map[valueT]{
-		header:       h,
-		highestLevel: defaultHighestLevel,
-	}
+func isNaNf32(x float32) bool {
+	return x != x
 }
 
-// NewFloat32 returns an empty skipmap in descending order.
-func NewFloat32Desc[valueT any]() *Float32MapDesc[valueT] {
-	var t valueT
-	h := newFloat32NodeDesc(0, t, maxLevel)
-	h.flags.SetTrue(fullyLinked)
-	return &Float32MapDesc[valueT]{
-		header:       h,
-		highestLevel: defaultHighestLevel,
-	}
+// NewFloat32 returns an empty skipmap in ascending order.
+func NewFloat32[valueT any]() *FuncMap[float32, valueT] {
+	return NewFunc[float32, valueT](func(a, b float32) bool {
+		return a < b || (isNaNf32(a) && !isNaNf32(b))
+	})
+}
+
+// NewFloat32Desc returns an empty skipmap in descending order.
+func NewFloat32Desc[valueT any]() *FuncMap[float32, valueT] {
+	return NewFunc[float32, valueT](func(a, b float32) bool {
+		return a > b || (isNaNf32(a) && !isNaNf32(b))
+	})
 }
 
 // NewFloat64 returns an empty skipmap in ascending order.
-func NewFloat64[valueT any]() *Float64Map[valueT] {
-	var t valueT
-	h := newFloat64Node(0, t, maxLevel)
-	h.flags.SetTrue(fullyLinked)
-	return &Float64Map[valueT]{
-		header:       h,
-		highestLevel: defaultHighestLevel,
-	}
+func NewFloat64[valueT any]() *FuncMap[float64, valueT] {
+	return NewFunc[float64, valueT](func(a, b float64) bool {
+		return a < b || (math.IsNaN(a) && !math.IsNaN(b))
+	})
 }
 
-// NewFloat64 returns an empty skipmap in descending order.
-func NewFloat64Desc[valueT any]() *Float64MapDesc[valueT] {
-	var t valueT
-	h := newFloat64NodeDesc(0, t, maxLevel)
-	h.flags.SetTrue(fullyLinked)
-	return &Float64MapDesc[valueT]{
-		header:       h,
-		highestLevel: defaultHighestLevel,
-	}
+// NewFloat64Desc returns an empty skipmap in descending order.
+func NewFloat64Desc[valueT any]() *FuncMap[float64, valueT] {
+	return NewFunc[float64, valueT](func(a, b float64) bool {
+		return a > b || (math.IsNaN(a) && !math.IsNaN(b))
+	})
 }
 
 // NewInt returns an empty skipmap in ascending order.
@@ -129,7 +119,7 @@ func NewInt[valueT any]() *IntMap[valueT] {
 	}
 }
 
-// NewInt returns an empty skipmap in descending order.
+// NewIntDesc returns an empty skipmap in descending order.
 func NewIntDesc[valueT any]() *IntMapDesc[valueT] {
 	var t valueT
 	h := newIntNodeDesc(0, t, maxLevel)
@@ -151,7 +141,7 @@ func NewInt64[valueT any]() *Int64Map[valueT] {
 	}
 }
 
-// NewInt64 returns an empty skipmap in descending order.
+// NewInt64Desc returns an empty skipmap in descending order.
 func NewInt64Desc[valueT any]() *Int64MapDesc[valueT] {
 	var t valueT
 	h := newInt64NodeDesc(0, t, maxLevel)
@@ -173,7 +163,7 @@ func NewInt32[valueT any]() *Int32Map[valueT] {
 	}
 }
 
-// NewInt32 returns an empty skipmap in descending order.
+// NewInt32Desc returns an empty skipmap in descending order.
 func NewInt32Desc[valueT any]() *Int32MapDesc[valueT] {
 	var t valueT
 	h := newInt32NodeDesc(0, t, maxLevel)
@@ -195,7 +185,7 @@ func NewUint64[valueT any]() *Uint64Map[valueT] {
 	}
 }
 
-// NewUint64 returns an empty skipmap in descending order.
+// NewUint64Desc returns an empty skipmap in descending order.
 func NewUint64Desc[valueT any]() *Uint64MapDesc[valueT] {
 	var t valueT
 	h := newUint64NodeDesc(0, t, maxLevel)
@@ -217,7 +207,7 @@ func NewUint32[valueT any]() *Uint32Map[valueT] {
 	}
 }
 
-// NewUint32 returns an empty skipmap in descending order.
+// NewUint32Desc returns an empty skipmap in descending order.
 func NewUint32Desc[valueT any]() *Uint32MapDesc[valueT] {
 	var t valueT
 	h := newUint32NodeDesc(0, t, maxLevel)
@@ -239,7 +229,7 @@ func NewUint[valueT any]() *UintMap[valueT] {
 	}
 }
 
-// NewUint returns an empty skipmap in descending order.
+// NewUintDesc returns an empty skipmap in descending order.
 func NewUintDesc[valueT any]() *UintMapDesc[valueT] {
 	var t valueT
 	h := newUintNodeDesc(0, t, maxLevel)

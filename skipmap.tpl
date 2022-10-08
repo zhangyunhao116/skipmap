@@ -164,6 +164,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Store(key {{.Ke
 		nn.flags.SetTrue(fullyLinked)
 		unlock{{.Name}}(preds, highestLocked)
 		atomic.AddInt64(&s.length, 1)
+		return
 	}
 }
 

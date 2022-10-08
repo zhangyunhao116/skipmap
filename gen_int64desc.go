@@ -165,6 +165,7 @@ func (s *Int64MapDesc[valueT]) Store(key int64, value valueT) {
 		nn.flags.SetTrue(fullyLinked)
 		unlockint64Desc(preds, highestLocked)
 		atomic.AddInt64(&s.length, 1)
+		return
 	}
 }
 

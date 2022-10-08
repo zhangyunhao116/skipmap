@@ -165,6 +165,7 @@ func (s *Uint32Map[valueT]) Store(key uint32, value valueT) {
 		nn.flags.SetTrue(fullyLinked)
 		unlockuint32(preds, highestLocked)
 		atomic.AddInt64(&s.length, 1)
+		return
 	}
 }
 

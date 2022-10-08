@@ -165,6 +165,7 @@ func (s *Float64Map[valueT]) Store(key float64, value valueT) {
 		nn.flags.SetTrue(fullyLinked)
 		unlockfloat64(preds, highestLocked)
 		atomic.AddInt64(&s.length, 1)
+		return
 	}
 }
 

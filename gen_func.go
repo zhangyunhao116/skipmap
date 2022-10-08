@@ -167,6 +167,7 @@ func (s *FuncMap[keyT, valueT]) Store(key keyT, value valueT) {
 		nn.flags.SetTrue(fullyLinked)
 		unlockfunc(preds, highestLocked)
 		atomic.AddInt64(&s.length, 1)
+		return
 	}
 }
 

@@ -165,6 +165,7 @@ func (s *StringMapDesc[valueT]) Store(key string, value valueT) {
 		nn.flags.SetTrue(fullyLinked)
 		unlockstringDesc(preds, highestLocked)
 		atomic.AddInt64(&s.length, 1)
+		return
 	}
 }
 

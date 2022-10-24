@@ -169,6 +169,7 @@ func (s *Int64Map[valueT]) Store(key int64, value valueT) {
 	}
 }
 
+// randomlevel returns a random level and update the highest level if needed.
 func (s *Int64Map[valueT]) randomlevel() int {
 	// Generate random level.
 	level := randomLevel()
@@ -278,8 +279,11 @@ func (s *Int64Map[valueT]) LoadAndDelete(key int64) (value valueT, loaded bool) 
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from Store)
 func (s *Int64Map[valueT]) LoadOrStore(key int64, value valueT) (actual valueT, loaded bool) {
-	level := s.randomlevel()
-	var preds, succs [maxLevel]*int64node[valueT]
+	var (
+		level        int
+		preds, succs [maxLevel]*int64node[valueT]
+		hl           = int(atomic.LoadUint64(&s.highestLevel))
+	)
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -299,6 +303,16 @@ func (s *Int64Map[valueT]) LoadOrStore(key int64, value valueT) (actual valueT, 
 			valid                = true
 			pred, succ, prevPred *int64node[valueT]
 		)
+		if level == 0 {
+			level = s.randomlevel()
+			if level > hl {
+				// If the highest level is updated, usually means that many goroutines
+				// are inserting items. Hopefully we can find a better path in next loop.
+				// TODO(zyh): consider filling the preds if s.header[level].next == nil,
+				// but this strategy's performance is almost the same as the existing method.
+				continue
+			}
+		}
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
 			succ = succs[layer]   // target node's next node
@@ -335,8 +349,11 @@ func (s *Int64Map[valueT]) LoadOrStore(key int64, value valueT) (actual valueT, 
 // The loaded result is true if the value was loaded, false if stored.
 // (Modified from LoadOrStore)
 func (s *Int64Map[valueT]) LoadOrStoreLazy(key int64, f func() valueT) (actual valueT, loaded bool) {
-	level := s.randomlevel()
-	var preds, succs [maxLevel]*int64node[valueT]
+	var (
+		level        int
+		preds, succs [maxLevel]*int64node[valueT]
+		hl           = int(atomic.LoadUint64(&s.highestLevel))
+	)
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
@@ -356,6 +373,16 @@ func (s *Int64Map[valueT]) LoadOrStoreLazy(key int64, f func() valueT) (actual v
 			valid                = true
 			pred, succ, prevPred *int64node[valueT]
 		)
+		if level == 0 {
+			level = s.randomlevel()
+			if level > hl {
+				// If the highest level is updated, usually means that many goroutines
+				// are inserting items. Hopefully we can find a better path in next loop.
+				// TODO(zyh): consider filling the preds if s.header[level].next == nil,
+				// but this strategy's performance is almost the same as the existing method.
+				continue
+			}
+		}
 		for layer := 0; valid && layer < level; layer++ {
 			pred = preds[layer]   // target node's previous node
 			succ = succs[layer]   // target node's next node

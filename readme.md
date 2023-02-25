@@ -4,31 +4,34 @@
 
 ## Introduction
 
-> If your Go version is lower than 1.18, use v0.7.0 instead.
+> If your Go version is older than 1.18, use v0.7.0 instead.
 
-skipmap is a high-performance, scalable, concurrent-safe map based on skip-list. In the typical pattern(100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipmap up to 10x faster than the built-in sync.Map.
+Skipmap is a high-performance, scalable, concurrent-safe map based on the skip-list. In the typical pattern (100000 operations, 90%LOAD 9%STORE 1%DELETE, 8C16T), the skipmap is up to 10x faster than the built-in sync.Map.
 
 The main idea behind the skipmap is [A Simple Optimistic Skiplist Algorithm](<https://people.csail.mit.edu/shanir/publications/LazySkipList.pdf>).
 
-Different from the sync.Map, the keys in the skipmap are always sorted, and the `Load` and `Range` operations are wait-free (A goroutine is guaranteed to complete an operation as long as it keeps taking steps, regardless of the activity of other goroutines).
+Different from the `sync.Map`, the keys in the skipmap are always sorted, and the `Load` and `Range` operations are wait-free (A goroutine is guaranteed to complete an operation as long as it keeps taking steps, regardless of the activity of other goroutines).
+
 
 
 ## Features
 
 - Scalable, high-performance, concurrent-safe.
-- Wait-free Load and Range operations (wait-free algorithms have stronger guarantees than lock-free).
+- Wait-free `Load` and `Range` operations (wait-free algorithms have stronger guarantees than lock-free).
 - Sorted items.
 
 
 
 ## When should you use skipmap
 
-In most cases, `skipmap` is better than `sync.Map`, especially in these situations: 
+In most cases, `skipmap` is better than `sync.Map`, especially in these situations:
 
 - **Sorted keys are needed**.
-- **Concurrent calls multiple operations**. Such as use both `Range` and `Store` at the same time, in this situation, use skipmap can obtain very large improvement on performance.
+- **Concurrent calls multiple operations**. Such as using both `Range` and `Store` at the same time, in this situation, using skipmap can greatly improve the performance.
 
-If only one goroutine access the map for the most of the time, such as insert a batch of elements and then use only `Load` or `Range`, use built-in map is better.
+If only one goroutine accesses the map for the most of the time, such to insert a batch of elements and then uses only `Load` or `Range`, using built-in map is better.
+
+
 
 
 ## QuickStart
@@ -88,16 +91,17 @@ func main() {
 
 ```
 
-**Note that generic APIs are always slower than typed APIs, but are more suitable for some scenarios such as functional programming.**
+**Note that the generic APIs are always slower than typed APIs, but are more suitable for some scenarios such as functional programming.**
 
 > e.g. `New[string,int]` is \~2x slower than `NewString[int]`, and `NewFunc[string,int](func(a, b string) bool { return a < b })` is 1\~2x slower than `NewString[int]`.
 >
 > Performance ranking: `NewString[int]` > `New[string,int]` > `NewFunc[string,int](func(a, b string) bool { return a < b })`
 
 
+
 ## Benchmark
 
-> based on typed APIs.
+> Based on typed APIs.
 
 Go version: go1.16.2 linux/amd64
 

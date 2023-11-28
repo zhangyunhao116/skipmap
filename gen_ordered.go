@@ -16,12 +16,12 @@ type OrderedMap[keyT ordered, valueT any] struct {
 }
 
 type orderednode[keyT ordered, valueT any] struct {
+	key   keyT
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   keyT
-	next  optionalArray // [level]*orderednode
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*orderednode
 }
 
 func newOrderedNode[keyT ordered, valueT any](key keyT, value valueT, level int) *orderednode[keyT, valueT] {

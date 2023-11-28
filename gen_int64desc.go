@@ -16,12 +16,12 @@ type Int64MapDesc[valueT any] struct {
 }
 
 type int64nodeDesc[valueT any] struct {
+	key   int64
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   int64
-	next  optionalArray // [level]*int64nodeDesc
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*int64nodeDesc
 }
 
 func newInt64NodeDesc[valueT any](key int64, value valueT, level int) *int64nodeDesc[valueT] {

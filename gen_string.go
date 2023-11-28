@@ -16,12 +16,12 @@ type StringMap[valueT any] struct {
 }
 
 type stringnode[valueT any] struct {
+	key   string
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   string
-	next  optionalArray // [level]*stringnode
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*stringnode
 }
 
 func newStringNode[valueT any](key string, value valueT, level int) *stringnode[valueT] {

@@ -16,12 +16,12 @@ type OrderedMapDesc[keyT ordered, valueT any] struct {
 }
 
 type orderednodeDesc[keyT ordered, valueT any] struct {
+	key   keyT
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   keyT
-	next  optionalArray // [level]*orderednodeDesc
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*orderednodeDesc
 }
 
 func newOrderedNodeDesc[keyT ordered, valueT any](key keyT, value valueT, level int) *orderednodeDesc[keyT, valueT] {

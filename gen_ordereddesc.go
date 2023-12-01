@@ -26,6 +26,7 @@ type orderednodeDesc[keyT ordered, valueT any] struct {
 
 func newOrderedNodeDesc[keyT ordered, valueT any](key keyT, value valueT, level int) *orderednodeDesc[keyT, valueT] {
 	node := &orderednodeDesc[keyT, valueT]{
+
 		key:   key,
 		level: uint32(level),
 	}
@@ -87,6 +88,7 @@ func (s *OrderedMapDesc[keyT, valueT]) findNode(key keyT, preds *[maxLevel]*orde
 func (s *OrderedMapDesc[keyT, valueT]) findNodeDelete(key keyT, preds *[maxLevel]*orderednodeDesc[keyT, valueT], succs *[maxLevel]*orderednodeDesc[keyT, valueT]) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
 		for succ != nil && (succ.key > key) {
@@ -117,6 +119,7 @@ func unlockorderedDesc[keyT ordered, valueT any](preds [maxLevel]*orderednodeDes
 // Store sets the value for a key.
 func (s *OrderedMapDesc[keyT, valueT]) Store(key keyT, value valueT) {
 	level := s.randomlevel()
+
 	var preds, succs [maxLevel]*orderednodeDesc[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
@@ -191,6 +194,7 @@ func (s *OrderedMapDesc[keyT, valueT]) randomlevel() int {
 // The ok result indicates whether value was found in the map.
 func (s *OrderedMapDesc[keyT, valueT]) Load(key keyT) (value valueT, ok bool) {
 	x := s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
 		for nex != nil && (nex.key > key) {

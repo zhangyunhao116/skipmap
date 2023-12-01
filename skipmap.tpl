@@ -15,6 +15,7 @@ type {{.StructPrefix}}Map{{.StructSuffix}}{{.TypeParam}} struct {
 }
 
 type {{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeParam}} struct {
+	{{.FSHashField}}
 	key   {{.KeyType}}
 	value unsafe.Pointer // *any
 	flags bitflag
@@ -23,8 +24,9 @@ type {{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeParam}} struct {
 	next  optionalArray  // [level]*{{.StructPrefixLow}}node{{.StructSuffix}}
 }
 
-func new{{.StructPrefix}}Node{{.StructSuffix}}{{.TypeParam}}(key {{.KeyType}}, value {{.ValueType}}, level int) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
+func new{{.StructPrefix}}Node{{.StructSuffix}}{{.TypeParam}}({{.FSHashParameter}} key {{.KeyType}}, value {{.ValueType}}, level int) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
 	node := &{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}{
+		{{.FSHashFieldAssign}}
 		key:   key,
 		level: uint32(level),
 	}
@@ -62,7 +64,7 @@ func (n *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) atomicStore
 // findNode takes a key and two maximal-height arrays then searches exactly as in a sequential skipmap.
 // The returned preds and succs always satisfy preds[i] > key >= succs[i].
 // (without fullpath, if find the node will return immediately)
-func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNode(key {{.KeyType}}, preds *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}, succs *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
+func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNode({{.FSHashParameter}} key {{.KeyType}}, preds *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}, succs *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {
 	x := s.header
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
@@ -86,6 +88,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNode(key {{
 func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) findNodeDelete(key {{.KeyType}}, preds *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}, succs *[maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
+	{{.FSHashResult}}
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
 		for succ != nil && {{Less "succ.key" "key"}} {
@@ -116,9 +119,10 @@ func unlock{{.Name}}{{.TypeParam}}(preds [maxLevel]*{{.StructPrefixLow}}node{{.S
 // Store sets the value for a key.
 func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Store(key {{.KeyType}}, value {{.ValueType}}) {
 	level := s.randomlevel()
+	{{.FSHashResult}}
 	var preds, succs [maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 	for {
-		nodeFound := s.findNode(key, &preds, &succs)
+		nodeFound := s.findNode({{.FSHashArgument}} key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
@@ -156,7 +160,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Store(key {{.Ke
 			continue
 		}
 
-		nn := new{{.StructPrefix}}Node{{.StructSuffix}}(key, value, level)
+		nn := new{{.StructPrefix}}Node{{.StructSuffix}}({{.FSHashArgument}} key, value, level)
 		for layer := 0; layer < level; layer++ {
 			nn.storeNext(layer, succs[layer])
 			preds[layer].atomicStoreNext(layer, nn)
@@ -190,6 +194,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) randomlevel() i
 // The ok result indicates whether value was found in the map.
 func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) Load(key {{.KeyType}}) (value {{.ValueType}}, ok bool) {
 	x := s.header
+	{{.FSHashResult}}
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
 		for nex != nil && {{Less "nex.key" "key"}} {
@@ -282,9 +287,10 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStore(key
 		level        int
 		preds, succs [maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 		hl           = int(atomic.LoadUint64(&s.highestLevel))
+		{{.FSHashResultS}}
 	)
 	for {
-		nodeFound := s.findNode(key, &preds, &succs)
+		nodeFound := s.findNode({{.FSHashArgument}} key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
@@ -331,7 +337,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStore(key
 			continue
 		}
 
-		nn := new{{.StructPrefix}}Node{{.StructSuffix}}(key, value, level)
+		nn := new{{.StructPrefix}}Node{{.StructSuffix}}({{.FSHashArgument}} key, value, level)
 		for layer := 0; layer < level; layer++ {
 			nn.storeNext(layer, succs[layer])
 			preds[layer].atomicStoreNext(layer, nn)
@@ -352,9 +358,10 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStoreLazy
 		level        int
 		preds, succs [maxLevel]*{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}}
 		hl           = int(atomic.LoadUint64(&s.highestLevel))
+		{{.FSHashResultS}}
 	)
 	for {
-		nodeFound := s.findNode(key, &preds, &succs)
+		nodeFound := s.findNode({{.FSHashArgument}} key, &preds, &succs)
 		if nodeFound != nil { // indicating the key is already in the skip-list
 			if !nodeFound.flags.Get(marked) {
 				// We don't need to care about whether or not the node is fully linked,
@@ -401,7 +408,7 @@ func (s *{{.StructPrefix}}Map{{.StructSuffix}}{{.TypeArgument}}) LoadOrStoreLazy
 			continue
 		}
 		value := f()
-		nn := new{{.StructPrefix}}Node{{.StructSuffix}}(key, value, level)
+		nn := new{{.StructPrefix}}Node{{.StructSuffix}}({{.FSHashArgument}} key, value, level)
 		for layer := 0; layer < level; layer++ {
 			nn.storeNext(layer, succs[layer])
 			preds[layer].atomicStoreNext(layer, nn)

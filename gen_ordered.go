@@ -26,6 +26,7 @@ type orderednode[keyT ordered, valueT any] struct {
 
 func newOrderedNode[keyT ordered, valueT any](key keyT, value valueT, level int) *orderednode[keyT, valueT] {
 	node := &orderednode[keyT, valueT]{
+
 		key:   key,
 		level: uint32(level),
 	}
@@ -87,6 +88,7 @@ func (s *OrderedMap[keyT, valueT]) findNode(key keyT, preds *[maxLevel]*orderedn
 func (s *OrderedMap[keyT, valueT]) findNodeDelete(key keyT, preds *[maxLevel]*orderednode[keyT, valueT], succs *[maxLevel]*orderednode[keyT, valueT]) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
 		for succ != nil && (succ.key < key) {
@@ -117,6 +119,7 @@ func unlockordered[keyT ordered, valueT any](preds [maxLevel]*orderednode[keyT, 
 // Store sets the value for a key.
 func (s *OrderedMap[keyT, valueT]) Store(key keyT, value valueT) {
 	level := s.randomlevel()
+
 	var preds, succs [maxLevel]*orderednode[keyT, valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
@@ -191,6 +194,7 @@ func (s *OrderedMap[keyT, valueT]) randomlevel() int {
 // The ok result indicates whether value was found in the map.
 func (s *OrderedMap[keyT, valueT]) Load(key keyT) (value valueT, ok bool) {
 	x := s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
 		for nex != nil && (nex.key < key) {

@@ -26,6 +26,7 @@ type int64nodeDesc[valueT any] struct {
 
 func newInt64NodeDesc[valueT any](key int64, value valueT, level int) *int64nodeDesc[valueT] {
 	node := &int64nodeDesc[valueT]{
+
 		key:   key,
 		level: uint32(level),
 	}
@@ -87,6 +88,7 @@ func (s *Int64MapDesc[valueT]) findNode(key int64, preds *[maxLevel]*int64nodeDe
 func (s *Int64MapDesc[valueT]) findNodeDelete(key int64, preds *[maxLevel]*int64nodeDesc[valueT], succs *[maxLevel]*int64nodeDesc[valueT]) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
 		for succ != nil && (succ.key > key) {
@@ -117,6 +119,7 @@ func unlockint64Desc[valueT any](preds [maxLevel]*int64nodeDesc[valueT], highest
 // Store sets the value for a key.
 func (s *Int64MapDesc[valueT]) Store(key int64, value valueT) {
 	level := s.randomlevel()
+
 	var preds, succs [maxLevel]*int64nodeDesc[valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
@@ -191,6 +194,7 @@ func (s *Int64MapDesc[valueT]) randomlevel() int {
 // The ok result indicates whether value was found in the map.
 func (s *Int64MapDesc[valueT]) Load(key int64) (value valueT, ok bool) {
 	x := s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
 		for nex != nil && (nex.key > key) {

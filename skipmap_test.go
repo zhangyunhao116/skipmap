@@ -17,6 +17,8 @@ func TestTyped(t *testing.T) {
 	testSkipMapInt(t, func() anyskipmap[int] { return NewInt[any]() })
 	testSkipMapIntDesc(t, func() anyskipmap[int] { return NewIntDesc[any]() })
 	testSkipMapString(t, func() anyskipmap[string] { return NewString[any]() })
+	testSkipMapString(t, func() anyskipmap[string] { return NewStringDesc[any]() })
+	testSkipMapString(t, func() anyskipmap[string] { return NewStringFast[any]() })
 	testSyncMapSuiteInt64(t, func() anyskipmap[int64] { return NewInt64[any]() })
 }
 

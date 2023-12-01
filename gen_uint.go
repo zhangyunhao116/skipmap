@@ -26,6 +26,7 @@ type uintnode[valueT any] struct {
 
 func newUintNode[valueT any](key uint, value valueT, level int) *uintnode[valueT] {
 	node := &uintnode[valueT]{
+
 		key:   key,
 		level: uint32(level),
 	}
@@ -87,6 +88,7 @@ func (s *UintMap[valueT]) findNode(key uint, preds *[maxLevel]*uintnode[valueT],
 func (s *UintMap[valueT]) findNodeDelete(key uint, preds *[maxLevel]*uintnode[valueT], succs *[maxLevel]*uintnode[valueT]) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
 		for succ != nil && (succ.key < key) {
@@ -117,6 +119,7 @@ func unlockuint[valueT any](preds [maxLevel]*uintnode[valueT], highestLevel int)
 // Store sets the value for a key.
 func (s *UintMap[valueT]) Store(key uint, value valueT) {
 	level := s.randomlevel()
+
 	var preds, succs [maxLevel]*uintnode[valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
@@ -191,6 +194,7 @@ func (s *UintMap[valueT]) randomlevel() int {
 // The ok result indicates whether value was found in the map.
 func (s *UintMap[valueT]) Load(key uint) (value valueT, ok bool) {
 	x := s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
 		for nex != nil && (nex.key < key) {

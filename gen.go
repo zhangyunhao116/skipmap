@@ -35,6 +35,15 @@ type Variant struct {
 	StructSuffix    string
 	ExtraFileds     string
 
+	// For fast string only.
+	// These fields are empty for other types.
+	FSHashResult      string // hash := strhash(key)
+	FSHashResultS     string // hash =  strhash(key)
+	FSHashField       string // hash uint64
+	FSHashFieldAssign string // hash : 0,
+	FSHashParameter   string // hash uint64,
+	FSHashArgument    string // hash,
+
 	// Basic key and value type.
 	KeyType   string
 	ValueType string
@@ -178,6 +187,50 @@ func main() {
 		generate(baseType)
 		generate(baseTypeDesc)
 	}
+
+	// For NewStringFast.
+	fv := &Variant{
+		Package:         "skipmap",
+		Name:            "stringfast",
+		Path:            "gen_stringfast.go",
+		Imports:         "\"sync\"\n\"sync/atomic\"\n\"unsafe\"\n",
+		KeyType:         "string",
+		ValueType:       "valueT",
+		TypeArgument:    "[valueT]",
+		TypeParam:       "[valueT any]",
+		StructPrefix:    "String",
+		StructPrefixLow: "string",
+		StructSuffix:    "Fast",
+
+		FSHashResult:      "hash := strhash(key)",
+		FSHashResultS:     "hash =  strhash(key)",
+		FSHashField:       "hash uint64",
+		FSHashFieldAssign: "hash : hash,",
+		FSHashParameter:   "hash uint64,",
+		FSHashArgument:    "hash,",
+
+		Funcs: template.FuncMap{
+			"Less": func(i, j string) string {
+				// succ.key < key
+				// =>
+				// succ.hash < hash
+				i = strings.ReplaceAll(i, "key", "hash")
+				j = strings.ReplaceAll(j, "key", "hash")
+				return fmt.Sprintf("(%s < %s)", i, j)
+			},
+			"Equal": func(i, j string) string {
+				// succ.key == key
+				// =>
+				// succ.hash == hash && succ.key == key
+				cond2 := fmt.Sprintf("%s == %s", i, j)
+				i = strings.ReplaceAll(i, "key", "hash")
+				j = strings.ReplaceAll(j, "key", "hash")
+				cond1 := fmt.Sprintf("%s == %s", i, j)
+				return fmt.Sprintf("%s && %s", cond1, cond2)
+			},
+		},
+	}
+	generate(fv)
 }
 
 // generate generates the code for variant `v` into a file named by `v.Path`.

@@ -16,16 +16,17 @@ type StringMapDesc[valueT any] struct {
 }
 
 type stringnodeDesc[valueT any] struct {
+	key   string
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   string
-	next  optionalArray // [level]*stringnodeDesc
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*stringnodeDesc
 }
 
 func newStringNodeDesc[valueT any](key string, value valueT, level int) *stringnodeDesc[valueT] {
 	node := &stringnodeDesc[valueT]{
+
 		key:   key,
 		level: uint32(level),
 	}
@@ -87,6 +88,7 @@ func (s *StringMapDesc[valueT]) findNode(key string, preds *[maxLevel]*stringnod
 func (s *StringMapDesc[valueT]) findNodeDelete(key string, preds *[maxLevel]*stringnodeDesc[valueT], succs *[maxLevel]*stringnodeDesc[valueT]) int {
 	// lFound represents the index of the first layer at which it found a node.
 	lFound, x := -1, s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		succ := x.atomicLoadNext(i)
 		for succ != nil && (succ.key > key) {
@@ -117,6 +119,7 @@ func unlockstringDesc[valueT any](preds [maxLevel]*stringnodeDesc[valueT], highe
 // Store sets the value for a key.
 func (s *StringMapDesc[valueT]) Store(key string, value valueT) {
 	level := s.randomlevel()
+
 	var preds, succs [maxLevel]*stringnodeDesc[valueT]
 	for {
 		nodeFound := s.findNode(key, &preds, &succs)
@@ -191,6 +194,7 @@ func (s *StringMapDesc[valueT]) randomlevel() int {
 // The ok result indicates whether value was found in the map.
 func (s *StringMapDesc[valueT]) Load(key string) (value valueT, ok bool) {
 	x := s.header
+
 	for i := int(atomic.LoadUint64(&s.highestLevel)) - 1; i >= 0; i-- {
 		nex := x.atomicLoadNext(i)
 		for nex != nil && (nex.key > key) {

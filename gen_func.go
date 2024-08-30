@@ -18,12 +18,12 @@ type FuncMap[keyT any, valueT any] struct {
 }
 
 type funcnode[keyT any, valueT any] struct {
+	key   keyT
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   keyT
-	next  optionalArray // [level]*funcnode
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*funcnode
 }
 
 func newFuncNode[keyT any, valueT any](key keyT, value valueT, level int) *funcnode[keyT, valueT] {

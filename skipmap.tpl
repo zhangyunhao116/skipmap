@@ -15,12 +15,12 @@ type {{.StructPrefix}}Map{{.StructSuffix}}{{.TypeParam}} struct {
 }
 
 type {{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeParam}} struct {
+	key   {{.KeyType}}
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   {{.KeyType}}
-	next  optionalArray  // [level]*{{.StructPrefixLow}}node{{.StructSuffix}}
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray  // [level]*{{.StructPrefixLow}}node{{.StructSuffix}}
 }
 
 func new{{.StructPrefix}}Node{{.StructSuffix}}{{.TypeParam}}(key {{.KeyType}}, value {{.ValueType}}, level int) *{{.StructPrefixLow}}node{{.StructSuffix}}{{.TypeArgument}} {

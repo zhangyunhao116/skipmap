@@ -16,12 +16,12 @@ type UintMap[valueT any] struct {
 }
 
 type uintnode[valueT any] struct {
+	key   uint
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   uint
-	next  optionalArray // [level]*uintnode
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*uintnode
 }
 
 func newUintNode[valueT any](key uint, value valueT, level int) *uintnode[valueT] {

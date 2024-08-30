@@ -16,12 +16,12 @@ type Uint32MapDesc[valueT any] struct {
 }
 
 type uint32nodeDesc[valueT any] struct {
+	key   uint32
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   uint32
-	next  optionalArray // [level]*uint32nodeDesc
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*uint32nodeDesc
 }
 
 func newUint32NodeDesc[valueT any](key uint32, value valueT, level int) *uint32nodeDesc[valueT] {

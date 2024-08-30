@@ -16,12 +16,12 @@ type StringMapDesc[valueT any] struct {
 }
 
 type stringnodeDesc[valueT any] struct {
+	key   string
 	value unsafe.Pointer // *any
 	flags bitflag
-	key   string
-	next  optionalArray // [level]*stringnodeDesc
-	mu    sync.Mutex
 	level uint32
+	mu    sync.Mutex
+	next  optionalArray // [level]*stringnodeDesc
 }
 
 func newStringNodeDesc[valueT any](key string, value valueT, level int) *stringnodeDesc[valueT] {
